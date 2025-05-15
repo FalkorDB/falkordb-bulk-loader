@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "falkordb-bulk-loader"
-version = "1.0.6"
+version = "1.0.7"
 description = "falkordb Bulk Import Tool"
 authors = ["FalkorDB Inc <info@falkordb.com>"]
 license = "BSD-3-Clause"
