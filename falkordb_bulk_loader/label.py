@@ -55,6 +55,7 @@ class Label(EntityFile):
                 "Node identifier '%s' was used multiple times - second occurrence at %s:%d\n"
                 % (identifier, self.infile.name, self.reader.line_num)
             )
+            sys.stderr.flush()
             if self.config.skip_invalid_nodes is False:
                 sys.exit(1)
         self.query_buffer.nodes[identifier] = self.query_buffer.top_node_id
