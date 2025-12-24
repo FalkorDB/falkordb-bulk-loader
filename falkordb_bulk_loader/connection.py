@@ -135,12 +135,16 @@ def create_redis_connection(url):
         # Handle sentinel URL
         config = parse_sentinel_url(url)
         sentinel = Sentinel(
-            config["sentinels"],
-            sentinel_kwargs=config["sentinel_kwargs"],
-            **config["connection_kwargs"],
+            config["sentinels"], sentinel_kwargs=config["sentinel_kwargs"]
         )
-        # Get master connection
-        return sentinel.master_for(config["service_name"], db=config["db"])
+        # Get master connection with connection parameters
+        # Don't pass db in connection_kwargs since we pass it separately
+        conn_kwargs = {
+            k: v for k, v in config["connection_kwargs"].items() if k != "db"
+        }
+        return sentinel.master_for(
+            config["service_name"], db=config["db"], **conn_kwargs
+        )
     else:
         # Handle regular Redis URL
         return redis.from_url(url)
@@ -162,12 +166,16 @@ def create_falkordb_client(url):
         # Handle sentinel URL
         config = parse_sentinel_url(url)
         sentinel = Sentinel(
-            config["sentinels"],
-            sentinel_kwargs=config["sentinel_kwargs"],
-            **config["connection_kwargs"],
+            config["sentinels"], sentinel_kwargs=config["sentinel_kwargs"]
         )
-        # Get master connection for FalkorDB
-        redis_client = sentinel.master_for(config["service_name"], db=config["db"])
+        # Get master connection for FalkorDB with connection parameters
+        # Don't pass db in connection_kwargs since we pass it separately
+        conn_kwargs = {
+            k: v for k, v in config["connection_kwargs"].items() if k != "db"
+        }
+        redis_client = sentinel.master_for(
+            config["service_name"], db=config["db"], **conn_kwargs
+        )
         # Create FalkorDB instance with the sentinel-based Redis connection
         return FalkorDB(connection=redis_client)
     else:
