@@ -108,6 +108,18 @@ class TestSentinelURLParsing:
         with pytest.raises(ValueError, match="No sentinel hosts specified"):
             parse_sentinel_url(url)
 
+    def test_invalid_port_number(self):
+        """Test that invalid port numbers raise an error."""
+        url = "redis+sentinel://localhost:invalid/mymaster/0"
+        with pytest.raises(ValueError, match="Invalid port number"):
+            parse_sentinel_url(url)
+
+    def test_invalid_db_number(self):
+        """Test that invalid database numbers raise an error."""
+        url = "redis+sentinel://localhost:26379/mymaster/invalid"
+        with pytest.raises(ValueError, match="Invalid database number"):
+            parse_sentinel_url(url)
+
 
 class TestConnectionCreation:
     """Test connection creation with regular and sentinel URLs."""

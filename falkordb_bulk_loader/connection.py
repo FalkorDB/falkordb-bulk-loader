@@ -59,7 +59,13 @@ def parse_sentinel_url(url):
             host_port = host_port.strip()
             if ":" in host_port:
                 host, port = host_port.rsplit(":", 1)
-                sentinels.append((host, int(port)))
+                try:
+                    sentinels.append((host, int(port)))
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid port number '{port}' in sentinel URL. "
+                        "Port must be an integer."
+                    )
             else:
                 sentinels.append((host_port, 26379))  # Default sentinel port
 
@@ -72,7 +78,13 @@ def parse_sentinel_url(url):
         raise ValueError("Service name must be specified in sentinel URL path")
 
     service_name = path_parts[0]
-    db = int(path_parts[1]) if len(path_parts) > 1 else 0
+    try:
+        db = int(path_parts[1]) if len(path_parts) > 1 else 0
+    except ValueError:
+        raise ValueError(
+            f"Invalid database number '{path_parts[1]}' in sentinel URL. "
+            "Database must be an integer."
+        )
 
     # Parse query parameters
     params = parse_qs(parsed.query)
@@ -92,6 +104,8 @@ def parse_sentinel_url(url):
     sentinel_kwargs = {}
     connection_kwargs = {
         "db": db,
+        # decode_responses=False to match redis.from_url() behavior
+        # and maintain compatibility with binary protocol expectations
         "decode_responses": False,
     }
 
