@@ -46,7 +46,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags             | Parameter                                                              |
 |:-----:|----------------------------|:----------------------------------------------------------------------:|
-|  -u   | --redis-url TEXT           | Server url (default: redis://127.0.0 1:6379)                           |
+|  -u   | --server-url TEXT          | Server url (default: redis://127.0.0.1:6379). Supports standard Redis URLs (redis://, rediss://, unix://) and Sentinel URLs (redis+sentinel://, rediss+sentinel://) |
 |  -n   | --nodes TEXT               | Path to Node CSV file with the filename as the Node Label              |
 |  -N   | --nodes-with-label TEXT    | Node Label followed by path to Node CSV file                           |
 |  -r   | --relations TEXT           | Path to Relationship CSV file with the filename as the Relationship Type  |
@@ -83,6 +83,43 @@ The flags for `max-token-count`, `max-buffer-size`, and `max-token-size` are typ
 `--enforce-schema-type` indicates that input CSV headers will follow the form described in [Input Schemas](#input-schemas).
 
 `--nodes-with-label` and `--relations-with-type` allows the node label or relationship type to be explicitly written instead of inferring them from the filename. For example, `--relations-with-type HAS_TAG post_hasTag_tag.csv` will add all relationships described in the specified CSV with the type `HAS_TAG`. To specify multiple labels separate them with ':'. For example, `--nodes-with-label Actor:Director actors.csv` will add all nodes described in the specified CSV with the labels `Actor` and `Director`.
+
+### Redis Sentinel Support
+
+The bulk loader supports Redis Sentinel for high-availability deployments. Use a sentinel URL with the following format:
+
+```
+redis+sentinel://host1:port1[,host2:port2,...]/service_name[/db][?param=value]
+```
+
+or for SSL/TLS connections:
+
+```
+rediss+sentinel://host1:port1[,host2:port2,...]/service_name[/db][?param=value]
+```
+
+**URL Components:**
+- `host1:port1,host2:port2,...` - Comma-separated list of sentinel hosts and ports
+- `service_name` - Name of the sentinel service (required)
+- `db` - Database number (optional, defaults to 0)
+- Query parameters like `password` and `socket_timeout` are supported
+
+**Examples:**
+
+Basic sentinel connection:
+```sh
+falkordb-bulk-insert GRAPH_DEMO --server-url redis+sentinel://localhost:26379/mymaster -n nodes.csv
+```
+
+Multiple sentinels with authentication:
+```sh
+falkordb-bulk-insert GRAPH_DEMO --server-url redis+sentinel://:mypassword@sentinel1:26379,sentinel2:26379,sentinel3:26379/mymaster/0 -n nodes.csv
+```
+
+With username and password:
+```sh
+falkordb-bulk-insert GRAPH_DEMO --server-url redis+sentinel://user:pass@sentinel1:26379/mymaster -n nodes.csv
+```
 
 ## Input constraints
 
@@ -208,16 +245,15 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags           |                         Parameter                          |
 |:-----:|--------------------------|:----------------------------------------------------------:|
-|  -h   | --host TEXT              |           Server host (default: 127.0.0.1)                 |
-|  -p   | --port INTEGER           |            Server port (default: 6379)                     |
-|  -a   | --password TEXT          |           Server password (default: none)                  |
-|  -u   | --unix-socket-path TEXT  |           Unix socket path (default: none)                 |
+|  -u   | --server-url TEXT        | FalkorDB connection url (default: falkor://127.0.0.1:6379). Supports standard Redis URLs and Sentinel URLs |
 |  -q   | --query TEXT             |                   Query to run on server                   |
 |  -v   | --variable-name TEXT     |   Variable name for row array in queries (default: row)    |
 |  -c   | --csv TEXT               |                   Path to CSV input file                   |
 |  -o   | --separator TEXT         |             Field token separator in CSV file              |
 |  -n   | --no-header              |             If set, the CSV file has no header             |
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
+
+The bulk updater also supports Redis Sentinel URLs in the same format as described in the [Redis Sentinel Support](#redis-sentinel-support) section.
 
 The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query.
 

@@ -3,9 +3,9 @@ from timeit import default_timer as timer
 
 import click
 import redis
-from falkordb import FalkorDB
 
 from .config import Config
+from .connection import create_falkordb_client, create_redis_connection
 from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
@@ -187,8 +187,8 @@ def bulk_insert(
         escapechar,
     )
 
-    redis_con = redis.from_url(server_url)
-    client = FalkorDB.from_url(server_url)
+    redis_con = create_redis_connection(server_url)
+    client = create_falkordb_client(server_url)
 
     # Attempt to connect to the server
     try:
