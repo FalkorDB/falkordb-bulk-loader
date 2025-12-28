@@ -365,7 +365,7 @@ class TestBulkLoader:
         with open("/tmp/nodes.tmp", mode="w") as csv_file:
             out = csv.writer(csv_file)
             out.writerow(["id", "nodename"])
-            out.writerow([0])  # Wrong number of properites
+            out.writerow([0])  # Wrong number of properties
 
         runner = CliRunner()
         res = runner.invoke(bulk_insert, ["--nodes", "/tmp/nodes.tmp", graphname])
