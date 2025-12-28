@@ -7,12 +7,20 @@ from .exceptions import CSVError
 
 
 class CSVSource:
-    """Tabular source backed by a CSV file.
+    """Row-oriented tabular source backed by a CSV file.
 
-    Exposes a header row, entity count, and an iterator over data rows.
+    This class exposes a header row, an entity (row) count, and an iterator
+    over data rows. It is intentionally minimal so that higher-level
+    components (labels, relation types) do not need to know whether the
+    underlying storage is CSV or something else.
     """
 
     def __init__(self, filename: str, config):
+        """Open ``filename`` and prepare a CSV reader.
+
+        The first row is treated as the header; all subsequent rows are
+        counted and yielded by :meth:`iter_rows`.
+        """
         self._file = io.open(filename, "rt")
         self.name = os.path.abspath(filename)
 
@@ -48,65 +56,87 @@ class CSVSource:
         next(self._reader, None)
 
     def iter_rows(self) -> Iterable[List[str]]:
+        """Yield each data row as a list of strings.
+
+        The row layout matches ``self.header``.
+        """
         for row in self._reader:
             yield row
 
     def close(self) -> None:
+        """Close the underlying CSV file.
+
+        Any ``OSError`` during close is ignored, as it is unlikely to affect
+        correctness in this batch-oriented CLI tool.
+        """
         try:
             self._file.close()
-        except Exception:
+        except OSError:
+            # Non-fatal; we are typically at process teardown.
             pass
 
 
 class ParquetSource:
-    """Tabular source backed by a Parquet file.
+        """Row-oriented tabular source backed by a Parquet file.
 
-    Uses pyarrow to read the Parquet file and exposes the same interface
-    as CSVSource. Values are converted to strings (or empty string for NULL)
-    so the existing type inference logic continues to work unchanged.
-    """
+        Uses :mod:`pyarrow.parquet` to expose the same interface as
+        :class:`CSVSource`. Values are converted to strings (or the empty
+        string for NULL) so that the existing type inference logic continues
+        to work unchanged.
+        """
 
-    def __init__(self, filename: str, config=None):  # config kept for API symmetry
-        try:
-            import pyarrow.parquet as pq  # type: ignore
-        except ImportError as e:
-            raise RuntimeError(
-                "pyarrow is required to load Parquet files. "
-                "Install it with `pip install pyarrow` or convert your Parquet "
-                "files to CSV."
-            ) from e
+        def __init__(self, filename: str, config=None):  # config kept for API symmetry
+            """Open ``filename`` as a Parquet dataset.
 
-        self.name = os.path.abspath(filename)
-        self._table = pq.read_table(filename)
-        self.header: List[str] = list(self._table.column_names)
-        self.entities_count: int = int(self._table.num_rows)
+            The header and entity count are derived from file metadata so we
+            do not need to materialize the entire file in memory at once.
+            """
+            try:
+                import pyarrow.parquet as pq  # type: ignore
+            except ImportError as e:
+                raise RuntimeError(
+                    "pyarrow is required to load Parquet files. "
+                    "Install it with `pip install pyarrow` or convert your Parquet "
+                    "files to CSV."
+                ) from e
 
-    def iter_rows(self) -> Iterable[List[str]]:
-        # Iterate over record batches to avoid materializing all rows at once.
-        # Note: ``RecordBatch.to_pylist()`` returns a list of dicts mapping
-        # column names to Python values, not a simple list of values.
-        # We must iterate over the columns in ``self.header`` order so that the
-        # row layout matches the header just like CSVSource does.
-        for batch in self._table.to_batches():
-            for row in batch.to_pylist():
-                # ``row`` is a dict {column_name: value}; preserve column order
-                # according to the header and normalize to strings like CSV.
-                values: List[str] = []
-                for col in self.header:
-                    v = row.get(col)
-                    values.append("" if v is None else str(v))
-                yield values
+            self.name = os.path.abspath(filename)
+            # Use ParquetFile to avoid reading the entire dataset eagerly.
+            self._pf = pq.ParquetFile(filename)
 
-    def close(self) -> None:
-        # Nothing to close explicitly, but drop reference to table.
-        self._table = None
+            # Column names and row count come from the schema/metadata.
+            schema = self._pf.schema_arrow
+            self.header = list(schema.names)
+            self.entities_count = int(self._pf.metadata.num_rows)
+
+        def iter_rows(self) -> Iterable[List[str]]:
+            """Yield each row as a list of strings in ``self.header`` order.
+
+            Iterates over record batches for each row group to keep memory
+            usage bounded for large Parquet files.
+            """
+            # ``iter_batches`` yields RecordBatch instances without
+            # materializing the whole table at once.
+            for batch in self._pf.iter_batches():
+                # ``to_pylist`` on a RecordBatch returns a list of dicts
+                # mapping column names to Python values.
+                for row in batch.to_pylist():
+                    values: List[str] = []
+                    for col in self.header:
+                        v = row.get(col)
+                        values.append("" if v is None else str(v))
+                    yield values
+
+        def close(self) -> None:
+            """Release references to the underlying Parquet file object."""
+            self._pf = None
 
 
 def make_source(filename: str, config):
     """Return an appropriate tabular source for the given file.
 
-    - .parquet -> ParquetSource (requires pyarrow)
-    - otherwise -> CSVSource
+    - ``.parquet`` files use :class:`ParquetSource` (requires ``pyarrow``).
+    - All other files are treated as CSV via :class:`CSVSource`.
     """
 
     ext = os.path.splitext(filename)[1].lower()
