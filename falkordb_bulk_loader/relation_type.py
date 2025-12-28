@@ -17,7 +17,7 @@ class RelationType(EntityFile):
         if self.column_count < 2:
             raise CSVError(
                 "Relation file '%s' should have at least 2 elements in header line."
-                % (self.infile.name)
+                % (self.infile_name)
             )
         # The first column is the source ID and the second is the destination ID.
         self.start_id = 0
@@ -33,12 +33,12 @@ class RelationType(EntityFile):
         if self.types.count(Type.START_ID) != 1:
             raise SchemaError(
                 "Relation file '%s' should have exactly one START_ID column."
-                % (self.infile.name)
+                % (self.infile_name)
             )
         if self.types.count(Type.END_ID) != 1:
             raise SchemaError(
                 "Relation file '%s' should have exactly one END_ID column."
-                % (self.infile.name)
+                % (self.infile_name)
             )
 
         self.start_id = self.types.index(Type.START_ID)
@@ -56,13 +56,13 @@ class RelationType(EntityFile):
     def process_entities(self):
         entities_created = 0
         with click.progressbar(
-            self.reader,
+            self.source.iter_rows(),
             length=self.entities_count,
             label=self.entity_str,
             update_min_steps=100,
         ) as reader:
-            for row in reader:
-                self.validate_row(row)
+            for idx, row in enumerate(reader, start=2):  # data rows start at line 2
+                self.validate_row(row, line_num=idx)
                 try:
                     start_id = row[self.start_id]
                     if self.start_namespace:
@@ -77,8 +77,8 @@ class RelationType(EntityFile):
                     print(
                         "%s:%d Relationship specified a non-existent identifier. src: %s; dest: %s"
                         % (
-                            self.infile.name,
-                            self.reader.line_num - 1,
+                            self.infile_name,
+                            idx,
                             row[self.start_id],
                             row[self.end_id],
                         )
@@ -90,9 +90,7 @@ class RelationType(EntityFile):
                 try:
                     row_binary = struct.pack(fmt, src, dest) + self.pack_props(row)
                 except SchemaError as e:
-                    raise SchemaError(
-                        "%s:%d %s" % (self.infile.name, self.reader.line_num, str(e))
-                    )
+                    raise SchemaError("%s:%d %s" % (self.infile_name, idx, str(e)))
                 row_binary_len = len(row_binary)
                 # If the addition of this entity will make the binary token grow too large,
                 # send the buffer now.
@@ -113,7 +111,7 @@ class RelationType(EntityFile):
                 self.binary_size += row_binary_len
                 self.binary_entities.append(row_binary)
             self.query_buffer.reltypes.append(self.to_binary())
-        self.infile.close()
+        self.source.close()
         print(
             "%d relations created for type '%s'" % (entities_created, self.entity_str)
         )

@@ -1,6 +1,5 @@
 import ast
 import csv
-import io
 import math
 import os
 import struct
@@ -8,6 +7,7 @@ import sys
 from enum import Enum
 
 from .exceptions import CSVError, SchemaError
+from .sources import make_source
 
 csv.field_size_limit(sys.maxsize)  # Don't limit the size of user input fields.
 
@@ -177,7 +177,11 @@ def inferred_prop_to_binary(prop_val):
 
 
 class EntityFile(object):
-    """Superclass for Label and RelationType classes"""
+    """Superclass for Label and RelationType classes
+
+    This class is agnostic to the underlying tabular format (CSV, Parquet, ...)
+    and relies on a tabular source created by ``make_source``.
+    """
 
     def __init__(self, filename, label, config):
         # The configurations for this run.
@@ -188,47 +192,36 @@ class EntityFile(object):
             self.entity_str = label
         else:
             self.entity_str = os.path.splitext(os.path.basename(filename))[0]
-        # Input file handling
-        self.infile = io.open(filename, "rt")
 
-        # Initialize CSV reader that ignores leading whitespace in each field
-        # and does not modify input quote characters
-        self.reader = csv.reader(
-            self.infile,
-            delimiter=config.separator,
-            skipinitialspace=True,
-            quoting=config.quoting,
-            escapechar=config.escapechar,
-        )
+        # Tabular input handling (CSV, Parquet, ...)
+        self.source = make_source(filename, config)
+        self.infile_name = self.source.name
+
+        # Header and entity count are provided by the source.
+        header = self.source.header
+        self.entities_count = self.source.entities_count
 
         self.packed_header = b""
         self.binary_entities = []
         self.binary_size = 0  # size of binary token
 
-        self.convert_header()  # Extract data from header row.
-        self.count_entities()  # Count number of entities/row in file.
-        next(self.reader)  # Skip the header row.
+        # Extract data from header row.
+        self.convert_header(header)
 
-    # Count number of rows in file.
-    def count_entities(self):
-        self.entities_count = 0
-        self.entities_count = sum(1 for line in self.infile)
-        # seek back
-        self.infile.seek(0)
-        return self.entities_count
-
-    # Simple input validations for each row of a CSV file
-    def validate_row(self, row):
+    # Simple input validations for each row of a tabular file
+    def validate_row(self, row, line_num=None):
         # Each row should have the same number of fields
         if len(row) != self.column_count:
+            location = (
+                f"{self.infile_name}:{line_num}" if line_num is not None else self.infile_name
+            )
             raise CSVError(
-                "%s:%d Expected %d columns, encountered %d ('%s')"
+                "%s Expected %d columns, encountered %d ('%s')"
                 % (
-                    self.infile.name,
-                    self.reader.line_num,
+                    location,
                     self.column_count,
                     len(row),
-                    self.config.separator.join(row),
+                    self.config.separator.join(str(col) for col in row),
                 )
             )
 
@@ -237,7 +230,7 @@ class EntityFile(object):
         self.binary_entities = []
         self.binary_size = len(self.packed_header)
 
-    # Convert property keys from a CSV file header into a binary string
+    # Convert property keys from a header into a binary string
     def pack_header(self):
         # String format
         entity_bytes = self.entity_str.encode()
@@ -262,7 +255,7 @@ class EntityFile(object):
             # TODO might need to check for backtick escapes
             if len(pair) > 2:
                 raise CSVError(
-                    f"{self.infile.name}: Field '{field}' had {len(field)} colons"
+                    f"{self.infile_name}: Field '{field}' had {len(field)} colons"
                 )
 
             # Convert the column type.
@@ -277,7 +270,7 @@ class EntityFile(object):
                 Type.IGNORE,
             ):
                 raise SchemaError(
-                    f"{self.infile.name}: Each property in the header should be a colon-separated pair"
+                    f"{self.infile_name}: Each property in the header should be a colon-separated pair"
                 )
             else:
                 # We have a column name and a type.
@@ -297,12 +290,10 @@ class EntityFile(object):
             # Store the column type.
             self.types[idx] = col_type
 
-    def convert_header(self):
-        header = next(self.reader)
+    def convert_header(self, header):
         self.column_count = len(header)
-        self.column_names = [
-            None
-        ] * self.column_count  # Property names of every column; None if column does not update graph.
+        # Property names of every column; None if column does not update graph.
+        self.column_names = [None] * self.column_count
 
         if self.config.enforce_schema:
             # Use generic logic to convert the header with schema.

@@ -35,7 +35,7 @@ class Label(EntityFile):
         # Verify that exactly one field is labeled ID.
         if (self.types.count(Type.ID_STRING) + self.types.count(Type.ID_INTEGER)) != 1:
             raise SchemaError(
-                f"Node file '{self.infile.name}' should have exactly one ID column."
+                f"Node file '{self.infile_name}' should have exactly one ID column."
             )
         # Track the offset containing the node ID.
         try:
@@ -52,8 +52,8 @@ class Label(EntityFile):
         """Add identifier->ID pair to dictionary if we are building relations"""
         if identifier in self.query_buffer.nodes:
             sys.stderr.write(
-                "Node identifier '%s' was used multiple times - second occurrence at %s:%d\n"
-                % (identifier, self.infile.name, self.reader.line_num)
+                "Node identifier '%s' was used multiple times - second occurrence in %s\n"
+                % (identifier, self.infile_name)
             )
             sys.stderr.flush()
             if self.config.skip_invalid_nodes is False:
@@ -64,13 +64,13 @@ class Label(EntityFile):
     def process_entities(self):
         entities_created = 0
         with click.progressbar(
-            self.reader,
+            self.source.iter_rows(),
             length=self.entities_count,
             label=self.entity_str,
             update_min_steps=100,
         ) as reader:
-            for row in reader:
-                self.validate_row(row)
+            for idx, row in enumerate(reader, start=2):  # data rows start at line 2
+                self.validate_row(row, line_num=idx)
 
                 # Update the node identifier dictionary if necessary
                 if self.config.store_node_identifiers:
@@ -82,11 +82,7 @@ class Label(EntityFile):
                 try:
                     row_binary = self.pack_props(row)
                 except SchemaError as e:
-                    # TODO why is line_num off by one?
-                    raise SchemaError(
-                        "%s:%d %s"
-                        % (self.infile.name, self.reader.line_num - 1, str(e))
-                    )
+                    raise SchemaError("%s:%d %s" % (self.infile_name, idx, str(e)))
                 row_binary_len = len(row_binary)
                 # If the addition of this entity will make the binary token grow too large,
                 # send the buffer now.
@@ -108,5 +104,5 @@ class Label(EntityFile):
                 self.binary_size += row_binary_len
                 self.binary_entities.append(row_binary)
             self.query_buffer.labels.append(self.to_binary())
-        self.infile.close()
+        self.source.close()
         print("%d nodes created with label '%s'" % (entities_created, self.entity_str))
