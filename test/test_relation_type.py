@@ -2,6 +2,8 @@ import csv
 import os
 import unittest
 
+import pytest
+
 from falkordb_bulk_loader.config import Config
 from falkordb_bulk_loader.relation_type import RelationType
 
@@ -54,3 +56,35 @@ class TestBulkLoader:
         assert reltype.types[0].name == "END_ID"
         assert reltype.types[1].name == "START_ID"
         assert reltype.types[2].name == "STRING"
+
+
+def test_parquet_relation_with_multiple_properties(tmp_path):
+    """Verify that Parquet relation files with multiple properties are parsed like CSV."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:
+        pytest.skip("pyarrow is not installed; skipping Parquet tests")
+
+    table = pa.table(
+        {
+            "Start:START_ID(StartNamespace)": [0, 1],
+            "End:END_ID(EndNamespace)": [1, 2],
+            "weight:DOUBLE": [0.5, 0.8],
+        }
+    )
+    parquet_path = tmp_path / "relations.parquet"
+    pq.write_table(table, parquet_path)
+
+    config = Config(enforce_schema=True)
+    reltype = RelationType(None, str(parquet_path), "RelationTest", config)
+
+    assert reltype.start_id == 0
+    assert reltype.start_namespace == "StartNamespace"
+    assert reltype.end_id == 1
+    assert reltype.end_namespace == "EndNamespace"
+    assert reltype.entity_str == "RelationTest"
+    assert reltype.prop_count == 1
+    assert reltype.entities_count == 2
+    assert reltype.types[0].name == "START_ID" or reltype.types[0].name == "END_ID"
+    assert reltype.types[2].name == "DOUBLE"
