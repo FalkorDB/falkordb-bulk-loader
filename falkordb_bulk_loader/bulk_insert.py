@@ -5,10 +5,10 @@ import click
 import redis
 from falkordb import FalkorDB
 
-from .config import Config
-from .label import Label
-from .query_buffer import QueryBuffer
-from .relation_type import RelationType
+from falkordb_bulk_loader.config import Config
+from falkordb_bulk_loader.label import Label
+from falkordb_bulk_loader.query_buffer import QueryBuffer
+from falkordb_bulk_loader.relation_type import RelationType
 
 
 def parse_schemas(cls, query_buf, path_to_csv, csv_tuples, config):

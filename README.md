@@ -145,7 +145,12 @@ All `storeNum` properties will be inserted as integers, `Location` will be inser
 The bulk loader can also read input directly from Parquet files.
 
 - Parquet files are detected by the `.parquet` extension.
-- Column names in the Parquet schema are treated exactly like CSV headers (for example, `id:ID(User)`, `name:STRING`).
+- **Column names in the Parquet schema are treated exactly like CSV headers.** This means you control property types by encoding the type in the column name, for example:
+  - `id:ID(User)` – node identifier of type `ID` in the `User` namespace.
+  - `name:STRING` – string property.
+  - `age:INT` – integer property.
+  - `:START_ID(User)`, `:END_ID(User)` – relation endpoints in the `User` namespace.
+- The physical Parquet types (e.g. `int64`, `double`) are *not* used for schema; only the header text is interpreted. If you want explicit typing, name your Parquet columns using the [Input Schemas](#input-schemas) format.
 - All cell values are converted to strings internally, so type inference and `--enforce-schema` work the same way as with CSV.
 - Each Parquet file still represents a single node label or relation type, and multiple attributes are represented by multiple columns, just like in CSV.
 - Reading Parquet requires `pyarrow` to be installed (`pip install pyarrow`).
