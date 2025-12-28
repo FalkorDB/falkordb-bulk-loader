@@ -46,7 +46,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags             | Parameter                                                              |
 |:-----:|----------------------------|:----------------------------------------------------------------------:|
-|  -u   | --redis-url TEXT           | Server url (default: redis://127.0.0 1:6379)                           |
+|  -u   | --redis-url TEXT           | Server URL (default: redis://127.0.0 1:6379)                           |
 |  -n   | --nodes TEXT               | Path to Node CSV file with the filename as the Node Label              |
 |  -N   | --nodes-with-label TEXT    | Node Label followed by path to Node CSV file                           |
 |  -r   | --relations TEXT           | Path to Relationship CSV file with the filename as the Relationship Type  |
@@ -61,7 +61,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 |  -b   | --max-buffer-size INT      | (Debug argument) Max batch size (MBs) of each query (default 64)        |
 |  -c   | --max-token-size INT       | (Debug argument) Max size (MBs) of each token sent to the server (default 64) |
 |  -i   | --index Label:Property     | After bulk import, create an Index on provided Label:Property pair (optional) |
-|  -f   | --full-text-index Label:Property | After bulk import, create an full text index on provided Label:Property pair (optional) |
+|  -f   | --full-text-index Label:Property | After bulk import, create a full text index on provided Label:Property pair (optional) |
 
 The only required arguments are the name to give the newly-created graph (which can appear anywhere) and at least one node CSV file.
 The nodes and relationship flags should be specified once per input file.
