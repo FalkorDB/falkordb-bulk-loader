@@ -128,7 +128,11 @@ class ParquetSource:
                     yield values
 
         def close(self) -> None:
-            """Release references to the underlying Parquet file object."""
+            """Close the underlying Parquet file object."""
+            try:
+                self._pf.close()
+            except (OSError, AttributeError):
+                pass
             self._pf = None
 
 
