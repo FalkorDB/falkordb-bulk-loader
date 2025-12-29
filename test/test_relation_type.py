@@ -88,3 +88,35 @@ def test_parquet_relation_with_multiple_properties(tmp_path):
     assert reltype.entities_count == 2
     assert reltype.types[0].name == "START_ID" or reltype.types[0].name == "END_ID"
     assert reltype.types[2].name == "DOUBLE"
+
+
+def test_parquet_relation_schemaless_header(tmp_path):
+    """Verify that Parquet relation files work without an explicit schema header."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:
+        pytest.skip("pyarrow is not installed; skipping Parquet tests")
+
+    # No :TYPE suffixes here; this should exercise the same default logic as CSV
+    # (first column is source ID, second is destination ID, remaining columns
+    # are properties).
+    table = pa.table(
+        {
+            "src": [0, 1],
+            "dest": [1, 2],
+            "weight": [0.5, 0.8],
+        }
+    )
+    parquet_path = tmp_path / "relations_schemaless.parquet"
+    pq.write_table(table, parquet_path)
+
+    config = Config()  # enforce_schema=False by default
+    reltype = RelationType(None, str(parquet_path), "RelationTest", config)
+
+    assert reltype.start_id == 0
+    assert reltype.end_id == 1
+    assert reltype.entity_str == "RelationTest"
+    # Only the "weight" column should be treated as a property
+    assert reltype.prop_count == 1
+    assert reltype.entities_count == 2

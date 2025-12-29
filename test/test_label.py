@@ -83,3 +83,33 @@ def test_parquet_label_with_multiple_properties(tmp_path):
     assert label.types[0].name == "ID_STRING"
     assert label.types[1].name == "STRING"
     assert label.types[2].name == "LONG"
+
+
+def test_parquet_label_schemaless_header(tmp_path):
+    """Verify that Parquet label files work without an explicit schema header."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:
+        pytest.skip("pyarrow is not installed; skipping Parquet tests")
+
+    # No :TYPE suffixes here; this should exercise the same default logic as CSV
+    # (first column is the node identifier, subsequent columns are properties).
+    table = pa.table(
+        {
+            "id": [0, 1],
+            "name": ["Jeff", "Jane"],
+        }
+    )
+    parquet_path = tmp_path / "labels_schemaless.parquet"
+    pq.write_table(table, parquet_path)
+
+    config = Config()  # enforce_schema=False by default
+    label = Label(None, str(parquet_path), "LabelTest", config)
+
+    # First column should be treated as the identifier, second as a property
+    assert label.column_names == ["id", "name"]
+    assert label.column_count == 2
+    assert label.entity_str == "LabelTest"
+    assert label.prop_count == 2
+    assert label.entities_count == 2
