@@ -3,6 +3,7 @@ import os
 import sys
 import unittest
 
+import pytest
 from click.testing import CliRunner
 from falkordb import FalkorDB
 
@@ -364,7 +365,7 @@ class TestBulkLoader:
         with open("/tmp/nodes.tmp", mode="w") as csv_file:
             out = csv.writer(csv_file)
             out.writerow(["id", "nodename"])
-            out.writerow([0])  # Wrong number of properites
+            out.writerow([0])  # Wrong number of properties
 
         runner = CliRunner()
         res = runner.invoke(bulk_insert, ["--nodes", "/tmp/nodes.tmp", graphname])
@@ -937,3 +938,69 @@ class TestBulkLoader:
             [1, "Filipe", ["User"], 1, 40, ["Post"]],
         ]
         assert query_result.result_set == expected_result
+
+
+def test_parquet_bulk_insert(tmp_path):
+    """Verify that the bulk loader can ingest Parquet node and relation files end-to-end."""
+
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:
+        pytest.skip("pyarrow is not installed; skipping Parquet bulk loader test")
+
+    # Build a tiny graph in Parquet using the input-schema header style so that
+    # the bulk loader can treat it exactly like a CSV schema.
+    nodes_table = pa.table(
+        {
+            "id:ID(User)": [0, 1],
+            "name:STRING": ["Jeffrey", "Filipe"],
+        }
+    )
+    rels_table = pa.table(
+        {
+            ":START_ID(User)": [0, 1],
+            ":END_ID(User)": [1, 0],
+            "since:INT": [2010, 2015],
+        }
+    )
+
+    nodes_path = tmp_path / "nodes.parquet"
+    rels_path = tmp_path / "relations.parquet"
+    pq.write_table(nodes_table, nodes_path)
+    pq.write_table(rels_table, rels_path)
+
+    graphname = "parquet_graph"
+    runner = CliRunner()
+    res = runner.invoke(
+        bulk_insert,
+        [
+            "--nodes-with-label",
+            "User",
+            str(nodes_path),
+            "--relations-with-type",
+            "KNOWS",
+            str(rels_path),
+            "--enforce-schema",
+            graphname,
+        ],
+        catch_exceptions=False,
+    )
+
+    assert res.exit_code == 0
+    assert "2 nodes created" in res.output
+    assert "2 relations created" in res.output
+
+    db_con = FalkorDB(host="localhost", port=6379)
+    graph = db_con.select_graph(graphname)
+
+    # Verify that nodes and relationships were created correctly.
+    result = graph.query(
+        "MATCH (u:User)-[r:KNOWS]->(v:User) "
+        "RETURN u.id, u.name, r.since, v.id, v.name ORDER BY u.id, v.id"
+    )
+    expected = [
+        ["0", "Jeffrey", 2010, "1", "Filipe"],
+        ["1", "Filipe", 2015, "0", "Jeffrey"],
+    ]
+    assert result.result_set == expected

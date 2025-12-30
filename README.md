@@ -44,9 +44,9 @@ Installation by cloning the repository allows the script to be invoked via Pytho
 python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 ```
 
-| Flags | Extended flags             | Parameter                                                              |
+|| Flags | Extended flags             | Parameter                                                              |
 |:-----:|----------------------------|:----------------------------------------------------------------------:|
-|  -u   | --redis-url TEXT           | Server url (default: redis://127.0.0 1:6379)                           |
+|  -u   | --redis-url TEXT           | Server URL (default: redis://127.0.0.1:6379)                           |
 |  -n   | --nodes TEXT               | Path to Node CSV file with the filename as the Node Label              |
 |  -N   | --nodes-with-label TEXT    | Node Label followed by path to Node CSV file                           |
 |  -r   | --relations TEXT           | Path to Relationship CSV file with the filename as the Relationship Type  |
@@ -61,7 +61,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 |  -b   | --max-buffer-size INT      | (Debug argument) Max batch size (MBs) of each query (default 64)        |
 |  -c   | --max-token-size INT       | (Debug argument) Max size (MBs) of each token sent to the server (default 64) |
 |  -i   | --index Label:Property     | After bulk import, create an Index on provided Label:Property pair (optional) |
-|  -f   | --full-text-index Label:Property | After bulk import, create an full text index on provided Label:Property pair (optional) |
+|  -f   | --full-text-index Label:Property | After bulk import, create a full text index on provided Label:Property pair (optional) |
 
 The only required arguments are the name to give the newly-created graph (which can appear anywhere) and at least one node CSV file.
 The nodes and relationship flags should be specified once per input file.
@@ -139,6 +139,34 @@ This CSV would be inserted with the command:
 (Since the pipe character has meaning in the terminal, it must be backslash-escaped.)
 
 All `storeNum` properties will be inserted as integers, `Location` will be inserted as strings, and `daysOpen` will be inserted as arrays of strings.
+
+## Loading from Parquet files
+
+The bulk loader can also read input directly from Parquet files.
+
+- Parquet files are detected by the `.parquet` extension.
+- **Column names in the Parquet schema are treated exactly like CSV headers.** This means you control property types by encoding the type in the column name, for example:
+  - `id:ID(User)` – node identifier of type `ID` in the `User` namespace.
+  - `name:STRING` – string property.
+  - `age:INT` – integer property.
+  - `:START_ID(User)`, `:END_ID(User)` – relation endpoints in the `User` namespace.
+- The physical Parquet types (e.g. `int64`, `double`) are *not* used for schema; only the header text is interpreted. If you want explicit typing, name your Parquet columns using the [Input Schemas](#input-schemas) format.
+- **A schema is not mandatory for Parquet files.** As with CSV, you can either:
+  - rely on the default, schemaless behavior (first column is the node identifier for labels; the first two columns are source and destination IDs for relations), or
+  - enable `--enforce-schema` and use input-schema style headers to control types explicitly.
+- All cell values are converted to strings internally, so type inference and `--enforce-schema` work the same way as with CSV.
+- Each Parquet file still represents a single node label or relation type, and multiple attributes are represented by multiple columns, just like in CSV.
+- Reading Parquet requires `pyarrow` to be installed (`pip install pyarrow`).
+- Complex Parquet column types (lists, maps, structs) are stringified; if you rely on arrays or nested structures, make sure their string form matches the CSV conventions described above.
+
+Example (mixing CSV and Parquet inputs):
+
+```sh
+falkordb-bulk-insert StoreGraph \
+  --nodes Store.csv \
+  --nodes StoreExtra.parquet \
+  --relations VISITED.parquet
+```
 
 ## Input Schemas
 
