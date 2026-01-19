@@ -44,8 +44,8 @@ Installation by cloning the repository allows the script to be invoked via Pytho
 python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 ```
 
-|| Flags | Extended flags             | Parameter                                                              |
-|:-----:|----------------------------|:----------------------------------------------------------------------:|
+| Flags | Extended flags             | Parameter                                                              |
+|:-----:|----------------------------|------------------------------------------------------------------------|
 |  -u   | --redis-url TEXT           | Server URL (default: redis://127.0.0.1:6379)                           |
 |  -n   | --nodes TEXT               | Path to Node CSV file with the filename as the Node Label              |
 |  -N   | --nodes-with-label TEXT    | Node Label followed by path to Node CSV file                           |
@@ -128,9 +128,9 @@ The flags for `max-token-count`, `max-buffer-size`, and `max-token-size` are typ
 Store.csv
 
 ```csv
-storeNum | Location | daysOpen |
-118 | 123 Main St | ['Mon', 'Wed', 'Fri']
-136 | 55 Elm St | ['Sat', 'Sun']
+storeNum|Location|daysOpen
+118|123 Main St|['Mon', 'Wed', 'Fri']
+136|55 Elm St|['Sat', 'Sun']
 ```
 
 This CSV would be inserted with the command:
@@ -234,17 +234,17 @@ Installation by cloning the repository allows the bulk updater to be invoked via
 python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 ```
 
-| Flags | Extended flags           |                         Parameter                          |
-|:-----:|--------------------------|:----------------------------------------------------------:|
-|  -h   | --host TEXT              |           Server host (default: 127.0.0.1)                 |
-|  -p   | --port INTEGER           |            Server port (default: 6379)                     |
-|  -a   | --password TEXT          |           Server password (default: none)                  |
-|  -u   | --unix-socket-path TEXT  |           Unix socket path (default: none)                 |
-|  -q   | --query TEXT             |                   Query to run on server                   |
-|  -v   | --variable-name TEXT     |   Variable name for row array in queries (default: row)    |
-|  -c   | --csv TEXT               |                   Path to CSV input file                   |
-|  -o   | --separator TEXT         |             Field token separator in CSV file              |
-|  -n   | --no-header              |             If set, the CSV file has no header             |
+| Flags | Extended flags           | Parameter                                                  |
+|:-----:|--------------------------|------------------------------------------------------------|
+|  -h   | --host TEXT              | Server host (default: 127.0.0.1)                           |
+|  -p   | --port INTEGER           | Server port (default: 6379)                                |
+|  -a   | --password TEXT          | Server password (default: none)                            |
+|  -u   | --unix-socket-path TEXT  | Unix socket path (default: none)                           |
+|  -q   | --query TEXT             | Query to run on server                                     |
+|  -v   | --variable-name TEXT     | Variable name for row array in queries (default: row)      |
+|  -c   | --csv TEXT               | Path to CSV input file                                     |
+|  -o   | --separator TEXT         | Field token separator in CSV file                          |
+|  -n   | --no-header              | If set, the CSV file has no header                         |
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
 
 The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query.
