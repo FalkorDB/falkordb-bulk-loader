@@ -40,7 +40,7 @@ pytest = "^6.2.4"
 pytest-cov = "^2.12.1"
 typing-extensions = "^4.1.1"
 black = "^22.6.0"
-isort = "^5.10.1"
+isort = "^7.0.0"
 flynt = "^0.76"
 # https://github.com/ionrock/cachecontrol/issues/292
 urllib3 = "1.26.15"
