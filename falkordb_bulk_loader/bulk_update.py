@@ -4,7 +4,8 @@ from timeit import default_timer as timer
 
 import click
 import redis
-from falkordb import FalkorDB
+
+from .connection import create_falkordb_client
 
 
 def utf8len(s):
@@ -187,7 +188,7 @@ def bulk_update(
     start_time = timer()
 
     # Attempt to connect to the server
-    client = FalkorDB.from_url(server_url)
+    client = create_falkordb_client(server_url)
     try:
         client.connection.ping()
     except redis.exceptions.ConnectionError as e:
