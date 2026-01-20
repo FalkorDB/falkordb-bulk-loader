@@ -78,7 +78,7 @@ jobs:
           source .venv/bin/activate
           tox -e cover
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         if: matrix.python == '3.10' && matrix.platform != 'macos-11'
         with:
           fail_ci_if_error: false
