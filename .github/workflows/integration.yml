@@ -21,29 +21,25 @@ env:
 
 jobs:
   lint:
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
     name: Code linting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: install base python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{env.basepython}}
-
-      - name: prepare the environment
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -U setuptools pip poetry==1.3.2 tox-poetry
-          poetry config virtualenvs.create false
-          poetry install
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ env.basepython }}
+      - name: Install dependencies
+        run: uv sync --all-groups --python ${{ env.basepython }}
       - name: lint
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          tox -e linters
+          uv run flake8 --show-source falkordb_bulk_loader
+          uv run black --target-version py36 --check --diff falkordb_bulk_loader
+          uv run isort --check-only --diff falkordb_bulk_loader
+          uv run vulture falkordb_bulk_loader/ --min-confidence 80
+          uv run flynt --fail-on-change --dry-run falkordb_bulk_loader
 
   tests:
     name: Test on ${{ matrix.platform }} with Python ${{ matrix.python }}
@@ -54,31 +50,24 @@ jobs:
         options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
         ports:
           - 6379:6379
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
     strategy:
       matrix:
         python: ['3.10', '3.11']
       fail-fast: false
     steps:
       - uses: actions/checkout@v6
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{matrix.python}}
-
-      - name: Prepare environment
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -U setuptools pip poetry==1.3.2 tox-poetry
-          poetry config virtualenvs.create false
-          poetry install
+          enable-cache: true
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+      - name: Install dependencies
+        run: uv sync --all-groups --python ${{ matrix.python }}
       - name: Run tests
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          tox -e cover
+          find . -type f -name "*.pyc" -delete
+          uv run pytest --cov-report=xml --cov falkordb_bulk_loader
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         if: matrix.python == '3.10' && matrix.platform != 'macos-11'

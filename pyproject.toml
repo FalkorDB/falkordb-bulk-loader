@@ -1,50 +1,58 @@
-[tool.poetry]
+[project]
 name = "falkordb-bulk-loader"
 version = "1.0.7"
 description = "falkordb Bulk Import Tool"
-authors = ["FalkorDB Inc <info@falkordb.com>"]
+authors = [{ name = "FalkorDB Inc", email = "info@falkordb.com" }]
 license = "BSD-3-Clause"
 readme = "README.md"
-
-classifiers = [
-    'Topic :: Database',
-    'Programming Language :: Python',
-    'Intended Audience :: Developers',
-    'License :: OSI Approved :: MIT License',
-    'Development Status :: 5 - Production/Stable'
-
-]
+requires-python = ">=3.10"
 keywords = ["FalkorDB Graph"]
+classifiers = [
+    "Topic :: Database",
+    "Programming Language :: Python",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Development Status :: 5 - Production/Stable",
+]
+dependencies = [
+    "click>=8.0.1,<9",
+    "FalkorDB>=1.0.10,<2",
+    "pathos>=0.2.8,<0.3",
+]
 
-[tool.poetry.scripts]
+[project.scripts]
 falkordb-bulk-update = "falkordb_bulk_loader.bulk_update:bulk_update"
 falkordb-bulk-insert = "falkordb_bulk_loader.bulk_insert:bulk_insert"
 
-[tool.poetry.urls]
-url = "https://falkordb.com"
-repository = "https://github.com/falkordb/falkordb-bulk-loader"
+[project.urls]
+Homepage = "https://falkordb.com"
+Repository = "https://github.com/falkordb/falkordb-bulk-loader"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-click = "^8.0.1"
-FalkorDB = "^1.0.10"
-pathos = "^0.2.8"
-
-[tool.poetry.dev-dependencies]
-codecov = "2.1.13"
-flake8 = "^7.3.0"
-tox = "^3.15.0"
-tox-poetry = "^0.3.0"
-vulture = "^2.3.0"
-pytest = "^9.0.2"
-pytest-cov = "^2.12.1"
-typing-extensions = "^4.1.1"
-black = "^22.6.0"
-isort = "^8.0.1"
-flynt = "^0.76"
-# https://github.com/ionrock/cachecontrol/issues/292
-urllib3 = "2.6.3"
+[dependency-groups]
+dev = [
+    "codecov==2.1.13",
+    "flake8>=7.3.0,<8",
+    "vulture>=2.3.0,<3",
+    "pytest>=9.0.2,<10",
+    "pytest-cov>=2.12.1,<3",
+    "typing-extensions>=4.1.1,<5",
+    "black>=22.6.0,<23",
+    "isort>=8.0.1,<9",
+    "flynt>=0.76,<0.77",
+    # https://github.com/ionrock/cachecontrol/issues/292
+    "urllib3==2.6.3",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["falkordb_bulk_loader"]
+
+[tool.pytest.ini_options]
+addopts = "-s"
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
