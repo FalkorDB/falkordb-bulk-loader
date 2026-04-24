@@ -213,7 +213,9 @@ class EntityFile(object):
         # Each row should have the same number of fields
         if len(row) != self.column_count:
             location = (
-                f"{self.infile_name}:{line_num}" if line_num is not None else self.infile_name
+                f"{self.infile_name}:{line_num}"
+                if line_num is not None
+                else self.infile_name
             )
             raise CSVError(
                 "%s Expected %d columns, encountered %d ('%s')"

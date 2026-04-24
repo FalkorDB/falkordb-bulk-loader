@@ -1004,3 +1004,6 @@ def test_parquet_bulk_insert(tmp_path):
         ["1", "Filipe", 2015, "0", "Jeffrey"],
     ]
     assert result.result_set == expected
+
+    # Clean up the graph created by this test.
+    graph.delete()

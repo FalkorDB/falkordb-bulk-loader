@@ -77,63 +77,66 @@ class CSVSource:
 
 
 class ParquetSource:
-        """Row-oriented tabular source backed by a Parquet file.
+    """Row-oriented tabular source backed by a Parquet file.
 
-        Uses :mod:`pyarrow.parquet` to expose the same interface as
-        :class:`CSVSource`. Values are converted to strings (or the empty
-        string for NULL) so that the existing type inference logic continues
-        to work unchanged.
+    Uses :mod:`pyarrow.parquet` to expose the same interface as
+    :class:`CSVSource`. Values are converted to strings (or the empty
+    string for NULL) so that the existing type inference logic continues
+    to work unchanged.
+    """
+
+    def __init__(self, filename: str, config=None):  # config kept for API symmetry
+        """Open ``filename`` as a Parquet dataset.
+
+        The header and entity count are derived from file metadata so we
+        do not need to materialize the entire file in memory at once.
         """
+        try:
+            import pyarrow.parquet as pq  # type: ignore
+        except ImportError as e:
+            raise RuntimeError(
+                "pyarrow is required to load Parquet files. "
+                "Install it with `pip install pyarrow` or convert your Parquet "
+                "files to CSV."
+            ) from e
 
-        def __init__(self, filename: str, config=None):  # config kept for API symmetry
-            """Open ``filename`` as a Parquet dataset.
+        self.name = os.path.abspath(filename)
+        # Use ParquetFile to avoid reading the entire dataset eagerly.
+        self._pf = pq.ParquetFile(filename)
 
-            The header and entity count are derived from file metadata so we
-            do not need to materialize the entire file in memory at once.
-            """
-            try:
-                import pyarrow.parquet as pq  # type: ignore
-            except ImportError as e:
-                raise RuntimeError(
-                    "pyarrow is required to load Parquet files. "
-                    "Install it with `pip install pyarrow` or convert your Parquet "
-                    "files to CSV."
-                ) from e
+        # Column names and row count come from the schema/metadata.
+        schema = self._pf.schema_arrow
+        self.header = list(schema.names)
+        self.entities_count = int(self._pf.metadata.num_rows)
 
-            self.name = os.path.abspath(filename)
-            # Use ParquetFile to avoid reading the entire dataset eagerly.
-            self._pf = pq.ParquetFile(filename)
+    def iter_rows(self) -> Iterable[List[str]]:
+        """Yield each row as a list of strings in ``self.header`` order.
 
-            # Column names and row count come from the schema/metadata.
-            schema = self._pf.schema_arrow
-            self.header = list(schema.names)
-            self.entities_count = int(self._pf.metadata.num_rows)
+        Iterates over record batches for each row group to keep memory
+        usage bounded for large Parquet files.
+        """
+        # ``iter_batches`` yields RecordBatch instances without
+        # materializing the whole table at once.
+        for batch in self._pf.iter_batches():
+            # ``to_pylist`` on a RecordBatch returns a list of dicts
+            # mapping column names to Python values.
+            for row in batch.to_pylist():
+                values: List[str] = []
+                for col in self.header:
+                    v = row.get(col)
+                    values.append("" if v is None else str(v))
+                yield values
 
-        def iter_rows(self) -> Iterable[List[str]]:
-            """Yield each row as a list of strings in ``self.header`` order.
-
-            Iterates over record batches for each row group to keep memory
-            usage bounded for large Parquet files.
-            """
-            # ``iter_batches`` yields RecordBatch instances without
-            # materializing the whole table at once.
-            for batch in self._pf.iter_batches():
-                # ``to_pylist`` on a RecordBatch returns a list of dicts
-                # mapping column names to Python values.
-                for row in batch.to_pylist():
-                    values: List[str] = []
-                    for col in self.header:
-                        v = row.get(col)
-                        values.append("" if v is None else str(v))
-                    yield values
-
-        def close(self) -> None:
-            """Close the underlying Parquet file object."""
-            try:
-                self._pf.close()
-            except (OSError, AttributeError):
-                pass
-            self._pf = None
+    def close(self) -> None:
+        """Close the underlying Parquet file object."""
+        if self._pf is None:
+            return
+        try:
+            self._pf.close()
+        except OSError:
+            # Non-fatal; we are typically at process teardown.
+            pass
+        self._pf = None
 
 
 def make_source(filename: str, config):
