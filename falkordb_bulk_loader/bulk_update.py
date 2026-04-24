@@ -116,6 +116,8 @@ class BulkUpdate:
                     converted = [convert_cell(cell) for cell in row]
 
                     # Estimate the UTF-8 size of this row for chunking purposes.
+                    # The +3 accounts for the surrounding brackets and separating
+                    # comma when this row is serialised as part of the params list.
                     added_size = sum(utf8len(str(cell)) for cell in converted) + 3
 
                     # Emit the current buffer if the max token size would be exceeded.

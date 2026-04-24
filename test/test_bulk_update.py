@@ -478,7 +478,8 @@ class TestTrickyCharacters:
 
     @classmethod
     def teardown_class(cls):
-        os.unlink("/tmp/tricky.tmp")
+        if os.path.exists("/tmp/tricky.tmp"):
+            os.unlink("/tmp/tricky.tmp")
         cls.db_con.flushdb()
 
     def test_tricky_cells(self):
