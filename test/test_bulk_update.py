@@ -461,6 +461,14 @@ class TestConvertCell:
     def test_unicode(self):
         assert convert_cell("こんにちは") == "こんにちは"
 
+    def test_non_finite_floats_kept_as_strings(self):
+        """Non-finite float tokens must be kept as strings, consistent with entity_file.py."""
+        for token in ("NaN", "nan", "NAN", "inf", "Inf", "INF", "infinity", "Infinity",
+                      "+inf", "-inf", "+infinity", "-infinity"):
+            result = convert_cell(token)
+            assert isinstance(result, str), f"Expected str for {token!r}, got {type(result)}"
+            assert result == token.strip()
+
 
 # ---------------------------------------------------------------------------
 # Integration tests for tricky CSV cells – require a running FalkorDB

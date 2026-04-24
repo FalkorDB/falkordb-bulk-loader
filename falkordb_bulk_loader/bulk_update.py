@@ -1,4 +1,5 @@
 import csv
+import math
 import sys
 from timeit import default_timer as timer
 
@@ -34,7 +35,10 @@ def convert_cell(cell):
     except ValueError:
         pass
     try:
-        return float(cell)
+        val = float(cell)
+        if math.isnan(val) or math.isinf(val):
+            return cell  # keep "NaN"/"Infinity"/etc. as a string
+        return val
     except ValueError:
         pass
     if cell.lower() == "true":
