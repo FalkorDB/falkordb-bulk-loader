@@ -4,10 +4,11 @@ import csv
 import os
 import unittest
 
+import pytest
 from click.testing import CliRunner
 from falkordb import FalkorDB
 
-from falkordb_bulk_loader.bulk_update import bulk_update
+from falkordb_bulk_loader.bulk_update import bulk_update, convert_cell
 
 class TestBulkUpdate:
 
@@ -149,8 +150,10 @@ class TestBulkUpdate:
             "MATCH (a) RETURN a.intval, a.doubleval, a.boolval, a.stringval, a.arrayval"
         )
 
-        # Validate that the expected results are all present in the graph
-        expected_result = [[0, 1.5, True, "string", "[1,'nested_str']"]]
+        # Validate that the expected results are all present in the graph.
+        # The array-literal cell is passed as a plain Python string via params,
+        # so it is stored and returned as-is (including the space after the comma).
+        expected_result = [[0, 1.5, True, "string", "[1, 'nested_str']"]]
         assert query_result.result_set == expected_result
 
     def test_custom_delimiter(self):
@@ -402,3 +405,162 @@ class TestBulkUpdate:
 
         assert res.exit_code != 0
         assert "No such file" in str(res.exception)
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for convert_cell – no FalkorDB connection required
+# ---------------------------------------------------------------------------
+
+
+class TestConvertCell:
+    """Unit tests for the convert_cell helper."""
+
+    def test_integer(self):
+        assert convert_cell("42") == 42
+        assert isinstance(convert_cell("42"), int)
+
+    def test_negative_integer(self):
+        assert convert_cell("-7") == -7
+
+    def test_float(self):
+        assert convert_cell("3.14") == pytest.approx(3.14)
+        assert isinstance(convert_cell("3.14"), float)
+
+    def test_bool_true(self):
+        assert convert_cell("true") is True
+        assert convert_cell("True") is True
+        assert convert_cell("TRUE") is True
+
+    def test_bool_false(self):
+        assert convert_cell("false") is False
+        assert convert_cell("False") is False
+
+    def test_string(self):
+        assert convert_cell("hello") == "hello"
+        assert isinstance(convert_cell("hello"), str)
+
+    def test_empty_cell(self):
+        assert convert_cell("") == ""
+        assert isinstance(convert_cell(""), str)
+
+    def test_whitespace_only_cell(self):
+        assert convert_cell("   ") == ""
+
+    def test_leading_trailing_whitespace(self):
+        assert convert_cell("  hello  ") == "hello"
+
+    def test_embedded_double_quote(self):
+        assert convert_cell('say "hi"') == 'say "hi"'
+
+    def test_embedded_backslash(self):
+        assert convert_cell("path\\to\\file") == "path\\to\\file"
+
+    def test_embedded_bracket(self):
+        assert convert_cell("[not an array]") == "[not an array]"
+
+    def test_unicode(self):
+        assert convert_cell("こんにちは") == "こんにちは"
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for tricky CSV cells – require a running FalkorDB
+# ---------------------------------------------------------------------------
+
+
+class TestTrickyCharacters:
+    """Regression tests for cells that previously broke the CYPHER rows=[…] literal."""
+
+    db_con = FalkorDB(host="localhost", port=6379)
+
+    @classmethod
+    def setup_class(cls):
+        cls.db_con.flushdb()
+
+    @classmethod
+    def teardown_class(cls):
+        os.unlink("/tmp/tricky.tmp")
+        cls.db_con.flushdb()
+
+    def test_tricky_cells(self):
+        """Cells with quotes, backslashes, brackets, commas, empty values, and
+        Unicode must not raise a parser error and must be stored correctly."""
+        graphname = "tricky_graph"
+
+        # Write a CSV with problematic cells.
+        with open("/tmp/tricky.tmp", mode="w", newline="") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["id", "val"])
+            writer.writerow([1, 'say "hello"'])
+            writer.writerow([2, "path\\to\\file"])
+            writer.writerow([3, "[not an array]"])
+            writer.writerow([4, ""])
+            writer.writerow([5, "  whitespace  "])
+            writer.writerow([6, "こんにちは"])
+
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            [
+                "--csv",
+                "/tmp/tricky.tmp",
+                "--query",
+                "CREATE (:T {id: row[0], val: row[1]})",
+                graphname,
+            ],
+            catch_exceptions=False,
+        )
+
+        assert res.exit_code == 0, res.output
+        assert "Nodes created: 6" in res.output
+
+        g = self.db_con.select_graph(graphname)
+        result = g.query("MATCH (n:T) RETURN n.id, n.val ORDER BY n.id")
+        expected = [
+            [1, 'say "hello"'],
+            [2, "path\\to\\file"],
+            [3, "[not an array]"],
+            [4, ""],
+            [5, "whitespace"],  # stripped by convert_cell
+            [6, "こんにちは"],
+        ]
+        assert result.result_set == expected
+
+    def test_empty_cell_guard(self):
+        """Regression: a CSV with an empty cell used inside a FOREACH guard must
+        no longer raise the 'expected =' parser error that the old code produced."""
+        graphname = "empty_guard_graph"
+
+        with open("/tmp/tricky.tmp", mode="w", newline="") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["id", "score"])
+            writer.writerow(["node1", "42"])
+            writer.writerow(["node2", ""])  # empty score – the original failure case
+
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            [
+                "--csv",
+                "/tmp/tricky.tmp",
+                "--query",
+                (
+                    "MERGE (n:Item {id: row[0]}) "
+                    "FOREACH (_ IN CASE WHEN row[1] <> '' THEN [1] ELSE [] END "
+                    "| SET n.score = toInteger(row[1]))"
+                ),
+                graphname,
+            ],
+            catch_exceptions=False,
+        )
+
+        assert res.exit_code == 0, res.output
+        assert "Nodes created: 2" in res.output
+
+        g = self.db_con.select_graph(graphname)
+        result = g.query(
+            "MATCH (n:Item) RETURN n.id, n.score ORDER BY n.id"
+        )
+        # node1 gets score=42; node2 score stays null (FOREACH guard skips it)
+        expected = [["node1", 42], ["node2", None]]
+        assert result.result_set == expected
+

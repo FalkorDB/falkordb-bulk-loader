@@ -19,6 +19,31 @@ def count_entities(filename):
     return entities_count
 
 
+def convert_cell(cell):
+    """Convert a CSV cell string to the most appropriate Python scalar.
+
+    Conversion order: int -> float -> bool -> str.
+    Empty / whitespace-only cells are returned as an empty string so that
+    existing Cypher guards such as ``row[i] <> ''`` continue to work.
+    """
+    cell = cell.strip()
+    if cell == "":
+        return ""
+    try:
+        return int(cell)
+    except ValueError:
+        pass
+    try:
+        return float(cell)
+    except ValueError:
+        pass
+    if cell.lower() == "true":
+        return True
+    if cell.lower() == "false":
+        return False
+    return cell
+
+
 class BulkUpdate:
     """Handler class for emitting bulk update commands"""
 
@@ -61,32 +86,13 @@ class BulkUpdate:
         self.statistics[key] = val
 
     def emit_buffer(self, rows):
-        command = " ".join([rows, self.query])
-        result = self.graph.query(command)
+        result = self.graph.query(self.query, params={"rows": rows})
         self.update_statistics(result)
-
-    def quote_string(self, cell):
-        cell = cell.strip()
-        # Quote-interpolate cell if it is an unquoted string.
-        try:
-            float(cell)  # Check for numeric
-        except ValueError:
-            if (
-                (cell.lower() != "false" and cell.lower() != "true")
-                and (cell[0] != "[" and cell.lower != "]")  # Check for boolean
-                and (cell[0] != '"' and cell[-1] != '"')  # Check for array
-                and (  # Check for double-quoted string
-                    cell[0] != "'" and cell[-1] != "'"
-                )
-            ):  # Check for single-quoted string
-                cell = "".join(['"', cell, '"'])
-        return cell
 
     # Raise an exception if the query triggers a compile-time error
     def validate_query(self):
-        command = " ".join(["CYPHER rows=[]", self.query])
-        # The plan call will raise an error if the query is malformed or invalid.
-        self.graph.explain(command)
+        # The explain call will raise an error if the query is malformed or invalid.
+        self.graph.explain(self.query, params={"rows": []})
 
     def process_update_csv(self):
         entity_count = count_entities(self.filename)
@@ -99,36 +105,29 @@ class BulkUpdate:
                 f,
                 delimiter=self.separator,
                 skipinitialspace=True,
-                quoting=csv.QUOTE_NONE,
-                escapechar="\\",
             )
 
-            rows_strs = []
+            rows = []
             with click.progressbar(
                 reader, length=entity_count, label=self.graph_name
             ) as reader:
                 for row in reader:
-                    # Prepare the string representation of the current row.
-                    row = ",".join([self.quote_string(cell) for cell in row])
-                    next_line = "".join(["[", row.strip(), "]"])
+                    # Convert each cell to the appropriate Python type.
+                    converted = [convert_cell(cell) for cell in row]
 
-                    # Emit buffer now if the max token size would be exceeded by this addition.
-                    added_size = (
-                        utf8len(next_line) + 1
-                    )  # Add one to compensate for the added comma.
+                    # Estimate the UTF-8 size of this row for chunking purposes.
+                    added_size = sum(utf8len(str(cell)) for cell in converted) + 3
+
+                    # Emit the current buffer if the max token size would be exceeded.
                     if self.buffer_size + added_size > self.max_token_size:
-                        # Concatenate all rows into a valid parameter set
-                        buf = "".join(["CYPHER rows=[", ",".join(rows_strs), "]"])
-                        self.emit_buffer(buf)
-                        rows_strs = []
+                        self.emit_buffer(rows)
+                        rows = []
                         self.buffer_size = 0
 
-                    # Concatenate the string into the rows string representation.
-                    rows_strs.append(next_line)
+                    rows.append(converted)
                     self.buffer_size += added_size
-            # Concatenate all rows into a valid parameter set
-            buf = "".join(["CYPHER rows=[", ",".join(rows_strs), "]"])
-            self.emit_buffer(buf)
+
+            self.emit_buffer(rows)
 
 
 ################################################################################
