@@ -32,17 +32,17 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ env.basepython }}
       - name: Install dependencies
-        run: uv sync --all-groups --python ${{ env.basepython }}
+        run: uv sync --all-groups --frozen --python ${{ env.basepython }}
       - name: lint
         run: |
           uv run flake8 --show-source falkordb_bulk_loader
-          uv run black --target-version py36 --check --diff falkordb_bulk_loader
+          uv run black --target-version py310 --check --diff falkordb_bulk_loader
           uv run isort --check-only --diff falkordb_bulk_loader
           uv run vulture falkordb_bulk_loader/ --min-confidence 80
           uv run flynt --fail-on-change --dry-run falkordb_bulk_loader
 
   tests:
-    name: Test on ${{ matrix.platform }} with Python ${{ matrix.python }}
+    name: Test with Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     services:
       stack:
@@ -63,14 +63,14 @@ jobs:
       - name: Set up Python ${{ matrix.python }}
         run: uv python install ${{ matrix.python }}
       - name: Install dependencies
-        run: uv sync --all-groups --python ${{ matrix.python }}
+        run: uv sync --all-groups --frozen --python ${{ matrix.python }}
       - name: Run tests
         run: |
           find . -type f -name "*.pyc" -delete
           uv run pytest --cov-report=xml --cov falkordb_bulk_loader
       - name: Upload coverage
         uses: codecov/codecov-action@v6
-        if: matrix.python == '3.10' && matrix.platform != 'macos-11'
+        if: matrix.python == '3.10'
         with:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
