@@ -211,9 +211,19 @@ class EntityFile(object):
 
     # Count number of rows in file.
     def count_entities(self):
+        # Use the same csv.reader configuration as the main reader so that
+        # rows containing embedded newlines (legal under RFC 4180) are
+        # counted as a single row rather than as N file lines.
         self.entities_count = 0
-        self.entities_count = sum(1 for line in self.infile)
-        # seek back
+        counting_reader = csv.reader(
+            self.infile,
+            delimiter=self.config.separator,
+            skipinitialspace=True,
+            quoting=self.config.quoting,
+            escapechar=self.config.escapechar,
+        )
+        self.entities_count = sum(1 for _ in counting_reader)
+        # seek back so the live reader starts at the beginning
         self.infile.seek(0)
         return self.entities_count
 
