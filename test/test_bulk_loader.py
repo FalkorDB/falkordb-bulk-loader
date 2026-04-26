@@ -509,7 +509,7 @@ class TestBulkLoader:
         ]
 
         for i, j in zip(query_result.result_set, expected_strs):
-            repr(i) == repr(j)
+            assert i == j
 
     def test_nonstandard_separators(self):
         """Validate use of non-comma delimiters in input files."""
