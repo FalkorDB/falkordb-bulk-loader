@@ -78,9 +78,11 @@ def typed_prop_to_binary(prop_val, prop_type):
             numeric_prop = int(prop_val)
             return struct.pack(format_str + "q", Type.LONG.value, numeric_prop)
         except (ValueError, struct.error):
-            # TODO ugly, rethink
-            if prop_type == Type.LONG:
-                raise SchemaError(f"Could not parse '{prop_val}' as a long")
+            # Both ID_INTEGER and LONG demand a parseable integer; falling
+            # through to the STRING branch would silently produce a
+            # type-confused ID that cannot be resolved by edge processing.
+            type_name = "long" if prop_type == Type.LONG else "integer ID"
+            raise SchemaError(f"Could not parse '{prop_val}' as a {type_name}")
 
     elif prop_type == Type.DOUBLE:
         try:
