@@ -17,7 +17,7 @@ classifiers = [
 dependencies = [
     "click>=8.0.1,<9",
     "FalkorDB>=1.0.10,<2",
-    "pathos>=0.2.8,<0.3",
+    "pathos>=0.2.8,<0.4",
 ]
 
 [project.scripts]
