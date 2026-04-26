@@ -140,6 +140,34 @@ This CSV would be inserted with the command:
 
 All `storeNum` properties will be inserted as integers, `Location` will be inserted as strings, and `daysOpen` will be inserted as arrays of strings.
 
+## Loading from Parquet files
+
+The bulk loader can also read input directly from Parquet files.
+
+- Parquet files are detected by the `.parquet` extension.
+- **Column names in the Parquet schema are treated exactly like CSV headers.** This means you control property types by encoding the type in the column name, for example:
+  - `id:ID(User)` – node identifier of type `ID` in the `User` namespace.
+  - `name:STRING` – string property.
+  - `age:INT` – integer property.
+  - `:START_ID(User)`, `:END_ID(User)` – relation endpoints in the `User` namespace.
+- The physical Parquet types (e.g. `int64`, `double`) are *not* used for schema; only the header text is interpreted. If you want explicit typing, name your Parquet columns using the [Input Schemas](#input-schemas) format.
+- **A schema is not mandatory for Parquet files.** As with CSV, you can either:
+  - rely on the default, schemaless behavior (first column is the node identifier for labels; the first two columns are source and destination IDs for relations), or
+  - enable `--enforce-schema` and use input-schema-style headers to control types explicitly.
+- All cell values are converted to strings internally, so type inference and `--enforce-schema` work the same way as with CSV.
+- Each Parquet file still represents a single node label or relation type, and multiple attributes are represented by multiple columns, just like in CSV.
+- Reading Parquet requires `pyarrow` to be installed (`pip install pyarrow`).
+- Complex Parquet column types (lists, maps, structs) are stringified; if you rely on arrays or nested structures, make sure their string form matches the CSV conventions described above.
+
+Example (mixing CSV and Parquet inputs):
+
+```sh
+falkordb-bulk-insert StoreGraph \
+  --nodes Store.csv \
+  --nodes StoreExtra.parquet \
+  --relations VISITED.parquet
+```
+
 ## Input Schemas
 
 If the `--enforce-schema` flag is specified, all input CSVs will be expected to specify each column's data type in the header.
