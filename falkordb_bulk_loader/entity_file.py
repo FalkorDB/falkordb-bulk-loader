@@ -262,7 +262,7 @@ class EntityFile(object):
             # TODO might need to check for backtick escapes
             if len(pair) > 2:
                 raise CSVError(
-                    f"{self.infile.name}: Field '{field}' had {len(field)} colons"
+                    f"{self.infile.name}: Field '{field}' had {len(pair) - 1} colons"
                 )
 
             # Convert the column type.
