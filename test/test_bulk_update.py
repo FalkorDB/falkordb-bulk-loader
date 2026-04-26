@@ -467,8 +467,17 @@ class TestConvertCell:
     def test_array_literal_mixed(self):
         assert convert_cell("[1, 'nested_str']") == [1, "nested_str"]
 
-    def test_array_invalid_literal_kept_as_string(self):
-        assert convert_cell("[not an array]") == "[not an array]"
+    def test_array_literal_empty(self):
+        assert convert_cell("[]") == []
+
+    def test_array_literal_booleans(self):
+        assert convert_cell("[True, False]") == [True, False]
+
+    def test_array_literal_nested(self):
+        assert convert_cell("[[1, 2], [3, 4]]") == [[1, 2], [3, 4]]
+
+    def test_array_literal_with_none(self):
+        assert convert_cell("[1, None]") == [1, None]
 
     def test_unicode(self):
         assert convert_cell("こんにちは") == "こんにちは"
