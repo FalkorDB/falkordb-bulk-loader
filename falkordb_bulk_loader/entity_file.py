@@ -49,7 +49,15 @@ def convert_schema_type(in_type):
 def array_prop_to_binary(format_str, prop_val):
     # Evaluate the array to convert its elements.
     # (This allows us to handle nested arrays.)
-    array_val = ast.literal_eval(prop_val)
+    # Catch ValueError/SyntaxError (malformed input) and RecursionError/
+    # MemoryError (pathological deep nesting) explicitly so callers get a
+    # clear SchemaError instead of an opaque interpreter-level exception.
+    try:
+        array_val = ast.literal_eval(prop_val)
+    except (ValueError, SyntaxError, RecursionError, MemoryError) as e:
+        raise SchemaError(
+            f"Could not parse '{prop_val}' as an array: {type(e).__name__}"
+        )
     # Send array length as a long.
     array_to_send = struct.pack(format_str + "q", Type.ARRAY.value, len(array_val))
     # Recursively send each array element as a string.
