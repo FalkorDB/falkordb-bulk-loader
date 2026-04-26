@@ -127,8 +127,9 @@ class BulkUpdate:
                     rows_strs.append(next_line)
                     self.buffer_size += added_size
             # Concatenate all rows into a valid parameter set
-            buf = "".join(["CYPHER rows=[", ",".join(rows_strs), "]"])
-            self.emit_buffer(buf)
+            if rows_strs:
+                buf = "".join(["CYPHER rows=[", ",".join(rows_strs), "]"])
+                self.emit_buffer(buf)
 
 
 ################################################################################
