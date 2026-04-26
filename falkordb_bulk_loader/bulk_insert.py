@@ -198,8 +198,8 @@ def bulk_insert(
 
     # Attempt to verify that falkordb module is loaded
     try:
-        module_list = [m[b"name"] for m in client.connection.module_list()]
-        if b"graph" not in module_list:
+        module_list = [m["name"] for m in client.connection.module_list()]
+        if "graph" not in module_list:
             print("falkordb module not loaded on connected server.")
             sys.exit(1)
     except redis.exceptions.ResponseError:
