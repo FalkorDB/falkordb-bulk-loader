@@ -2,6 +2,7 @@
 
 import csv
 import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -425,22 +426,31 @@ class TestBulkUpdateEmptyCSV:
 
     def test_header_only_csv_does_not_emit(self):
         """emit_buffer must not be called when the CSV contains only a header row."""
-        csv_path = "/tmp/header_only.csv"
-        with open(csv_path, mode="w") as f:
-            f.write("id,name\n")
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False
+        ) as tmp:
+            tmp.write("id,name\n")
+            csv_path = tmp.name
 
-        updater = self._make_updater(csv_path, no_header=False)
-        with patch.object(updater, "emit_buffer") as mock_emit:
-            updater.process_update_csv()
-            mock_emit.assert_not_called()
+        try:
+            updater = self._make_updater(csv_path, no_header=False)
+            with patch.object(updater, "emit_buffer") as mock_emit:
+                updater.process_update_csv()
+                mock_emit.assert_not_called()
+        finally:
+            os.unlink(csv_path)
 
     def test_empty_csv_no_header_does_not_emit(self):
         """emit_buffer must not be called when the CSV is empty and --no-header is set."""
-        csv_path = "/tmp/empty_noheader.csv"
-        with open(csv_path, mode="w") as f:
-            pass  # empty file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False
+        ) as tmp:
+            csv_path = tmp.name  # empty file
 
-        updater = self._make_updater(csv_path, no_header=True)
-        with patch.object(updater, "emit_buffer") as mock_emit:
-            updater.process_update_csv()
-            mock_emit.assert_not_called()
+        try:
+            updater = self._make_updater(csv_path, no_header=True)
+            with patch.object(updater, "emit_buffer") as mock_emit:
+                updater.process_update_csv()
+                mock_emit.assert_not_called()
+        finally:
+            os.unlink(csv_path)
