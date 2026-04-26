@@ -3,11 +3,12 @@
 import csv
 import os
 import unittest
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 from falkordb import FalkorDB
 
-from falkordb_bulk_loader.bulk_update import bulk_update
+from falkordb_bulk_loader.bulk_update import BulkUpdate, bulk_update
 
 class TestBulkUpdate:
 
@@ -402,3 +403,44 @@ class TestBulkUpdate:
 
         assert res.exit_code != 0
         assert "No such file" in str(res.exception)
+
+
+class TestBulkUpdateEmptyCSV:
+    """Unit tests for empty-CSV behavior; no live FalkorDB connection needed."""
+
+    def _make_updater(self, csv_path, no_header=False):
+        """Create a BulkUpdate instance backed by a mock client."""
+        mock_client = MagicMock()
+        updater = BulkUpdate(
+            graph_name="testgraph",
+            max_token_size=500,
+            separator=",",
+            no_header=no_header,
+            filename=csv_path,
+            query="CREATE (:L {id: row[0]})",
+            variable_name="row",
+            client=mock_client,
+        )
+        return updater
+
+    def test_header_only_csv_does_not_emit(self):
+        """emit_buffer must not be called when the CSV contains only a header row."""
+        csv_path = "/tmp/header_only.csv"
+        with open(csv_path, mode="w") as f:
+            f.write("id,name\n")
+
+        updater = self._make_updater(csv_path, no_header=False)
+        with patch.object(updater, "emit_buffer") as mock_emit:
+            updater.process_update_csv()
+            mock_emit.assert_not_called()
+
+    def test_empty_csv_no_header_does_not_emit(self):
+        """emit_buffer must not be called when the CSV is empty and --no-header is set."""
+        csv_path = "/tmp/empty_noheader.csv"
+        with open(csv_path, mode="w") as f:
+            pass  # empty file
+
+        updater = self._make_updater(csv_path, no_header=True)
+        with patch.object(updater, "emit_buffer") as mock_emit:
+            updater.process_update_csv()
+            mock_emit.assert_not_called()
