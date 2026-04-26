@@ -38,7 +38,7 @@ dev = [
     "typing-extensions>=4.1.1,<5",
     "black>=22.6.0,<23",
     "isort>=8.0.1,<9",
-    "flynt>=0.76,<0.77",
+    "flynt>=0.76,<1.1",
     # https://github.com/ionrock/cachecontrol/issues/292
     "urllib3==2.6.3",
 ]
