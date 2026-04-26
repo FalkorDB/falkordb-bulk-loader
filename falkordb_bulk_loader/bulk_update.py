@@ -145,7 +145,7 @@ class BulkUpdate:
     help="FalkorDB connection url",
 )
 # Cypher query options
-@click.option("--query", "-q", help="Query to run on server")
+@click.option("--query", "-q", required=True, help="Query to run on server")
 @click.option(
     "--variable-name",
     "-v",
@@ -153,7 +153,7 @@ class BulkUpdate:
     help="Variable name for row array in queries (default: row)",
 )
 # CSV file options
-@click.option("--csv", "-c", help="Path to CSV input file")
+@click.option("--csv", "-c", required=True, help="Path to CSV input file")
 @click.option(
     "--separator", "-o", default=",", help="Field token separator in CSV file"
 )
