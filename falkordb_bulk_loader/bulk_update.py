@@ -141,7 +141,7 @@ class BulkUpdate:
 @click.option(
     "--server-url",
     "-u",
-    default="falkor://127.0.0.1:6379",
+    default="redis://127.0.0.1:6379",
     help="FalkorDB connection url",
 )
 # Cypher query options
