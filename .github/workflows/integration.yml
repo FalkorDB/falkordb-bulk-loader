@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: install base python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{env.basepython}}
 
@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{matrix.python}}
 
@@ -80,7 +80,7 @@ jobs:
           source .venv/bin/activate
           tox -e cover
       - name: Upload coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         if: matrix.python == '3.10' && matrix.platform != 'macos-11'
         with:
           fail_ci_if_error: false
