@@ -161,8 +161,8 @@ def bulk_insert(
     index,
     full_text_index,
 ):
-    if sys.version_info.major < 3 or sys.version_info.minor < 6:
-        raise Exception("Python >= 3.6 is required for the falkordb bulk loader.")
+    if sys.version_info < (3, 10):
+        raise RuntimeError("Python >= 3.10 is required for the falkordb bulk loader.")
 
     if not (any(nodes) or any(nodes_with_label)):
         raise Exception("At least one node file must be specified.")

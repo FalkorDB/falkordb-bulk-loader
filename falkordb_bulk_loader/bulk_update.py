@@ -181,8 +181,8 @@ def bulk_update(
     no_header,
     max_token_size,
 ):
-    if sys.version_info[0] < 3:
-        raise Exception("Python 3 is required for the falkordb bulk updater.")
+    if sys.version_info < (3, 10):
+        raise RuntimeError("Python >= 3.10 is required for the falkordb bulk updater.")
 
     start_time = timer()
 
