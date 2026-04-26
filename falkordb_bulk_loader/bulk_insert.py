@@ -161,8 +161,8 @@ def bulk_insert(
     index,
     full_text_index,
 ):
-    if sys.version_info.major < 3 or sys.version_info.minor < 6:
-        raise Exception("Python >= 3.6 is required for the falkordb bulk loader.")
+    if sys.version_info < (3, 10):
+        raise RuntimeError("Python >= 3.10 is required for the falkordb bulk loader.")
 
     if not (any(nodes) or any(nodes_with_label)):
         raise Exception("At least one node file must be specified.")
@@ -187,20 +187,19 @@ def bulk_insert(
         escapechar,
     )
 
-    redis_con = redis.from_url(server_url)
     client = FalkorDB.from_url(server_url)
 
     # Attempt to connect to the server
     try:
-        redis_con.ping()
+        client.connection.ping()
     except redis.exceptions.ConnectionError as e:
         print("Could not connect to FalkorDB server.")
         raise e
 
     # Attempt to verify that falkordb module is loaded
     try:
-        module_list = [m[b"name"] for m in redis_con.module_list()]
-        if b"graph" not in module_list:
+        module_list = [m["name"] for m in client.connection.module_list()]
+        if "graph" not in module_list:
             print("falkordb module not loaded on connected server.")
             sys.exit(1)
     except redis.exceptions.ResponseError:
@@ -208,7 +207,7 @@ def bulk_insert(
         pass
 
     # Verify that the graph name is not already used in the Redis database
-    key_exists = redis_con.exists(graph)
+    key_exists = client.connection.exists(graph)
     if key_exists:
         print(
             f"Graph with name '{graph}', could not be created, as '{graph}' already exists."
