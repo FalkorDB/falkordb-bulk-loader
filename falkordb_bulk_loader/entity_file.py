@@ -265,6 +265,13 @@ class EntityFile(object):
                     f"{self.infile.name}: Field '{field}' had {len(field)} colons"
                 )
 
+            # No colon found - the schema header is missing a type for this field.
+            if len(pair) < 2:
+                raise CSVError(
+                    f"{self.infile.name}: Schema header field '{field}' is missing "
+                    f"a type (expected 'name:TYPE')"
+                )
+
             # Convert the column type.
             col_type = convert_schema_type(pair[1].upper().strip())
 
