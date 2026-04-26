@@ -230,4 +230,9 @@ falkordb-bulk-update SocialGraph --csv FOLLOWS.csv --query "MATCH (start {id: ro
 
 When using the bulk updater, it is essential to sanitize CSV inputs beforehand, as falkordb *will* commit changes to the graph incrementally. As such, malformed inputs may leave the graph in a partially-updated state.
 
-Row values are passed to the server as Cypher parameters, so special characters such as quotation marks, backslashes, and brackets are handled safely without any manual escaping. Each CSV cell is converted to the most appropriate Python type before being sent: integers and floats are inferred automatically, the strings `true` and `false` (case-insensitive) become booleans, and every other value is kept as a string. Empty cells are passed as the empty string `""`, so existing Cypher guards like `CASE WHEN row[i] <> '' THEN …` continue to work as expected.
+Row values are passed to the server as Cypher parameters, so special characters such as quotation marks, backslashes, and brackets are handled safely without any manual escaping. Each CSV cell is converted to the most appropriate Python type before being sent:
+
+- **Integer / float**: numeric strings are inferred automatically.
+- **Boolean**: the strings `true` and `false` (case-insensitive) become booleans.
+- **Array**: cells that start with `[` and end with `]` are parsed as Python literal arrays (e.g. `[1,'nested_str']`), which FalkorDB stores as array properties.  Cells that look like brackets but are not valid Python literals (e.g. `[not an array]`) are kept as strings.
+- **String**: all other values are passed as plain strings.  Empty cells are passed as the empty string `""`, so existing Cypher guards like `CASE WHEN row[i] <> '' THEN …` continue to work as expected.

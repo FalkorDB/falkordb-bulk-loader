@@ -151,9 +151,9 @@ class TestBulkUpdate:
         )
 
         # Validate that the expected results are all present in the graph.
-        # The array-literal cell is passed as a plain Python string via params,
-        # so it is stored and returned as-is (including the space after the comma).
-        expected_result = [[0, 1.5, True, "string", "[1, 'nested_str']"]]
+        # The array-literal cell is parsed into a Python list by convert_cell
+        # and stored as an array property by FalkorDB.
+        expected_result = [[0, 1.5, True, "string", [1, "nested_str"]]]
         assert query_result.result_set == expected_result
 
     def test_custom_delimiter(self):
@@ -456,6 +456,18 @@ class TestConvertCell:
         assert convert_cell("path\\to\\file") == "path\\to\\file"
 
     def test_embedded_bracket(self):
+        assert convert_cell("[not an array]") == "[not an array]"
+
+    def test_array_literal_ints(self):
+        assert convert_cell("[1, 2, 3]") == [1, 2, 3]
+
+    def test_array_literal_strings(self):
+        assert convert_cell("['a', 'b']") == ["a", "b"]
+
+    def test_array_literal_mixed(self):
+        assert convert_cell("[1, 'nested_str']") == [1, "nested_str"]
+
+    def test_array_invalid_literal_kept_as_string(self):
         assert convert_cell("[not an array]") == "[not an array]"
 
     def test_unicode(self):

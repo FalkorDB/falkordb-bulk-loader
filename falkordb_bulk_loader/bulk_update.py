@@ -1,4 +1,6 @@
+import ast
 import csv
+import json
 import math
 import sys
 from timeit import default_timer as timer
@@ -23,9 +25,12 @@ def count_entities(filename):
 def convert_cell(cell):
     """Convert a CSV cell string to the most appropriate Python scalar.
 
-    Conversion order: int -> float -> bool -> str.
+    Conversion order: int -> float -> bool -> list -> str.
     Empty / whitespace-only cells are returned as an empty string so that
     existing Cypher guards such as ``row[i] <> ''`` continue to work.
+    Array-literal cells (e.g. ``[1,'nested_str']``) are parsed into Python
+    lists so that FalkorDB stores them as array properties, preserving the
+    behaviour of the original bulk updater.
     """
     cell = cell.strip()
     if cell == "":
@@ -45,6 +50,13 @@ def convert_cell(cell):
         return True
     if cell.lower() == "false":
         return False
+    if cell.startswith("[") and cell.endswith("]"):
+        try:
+            parsed = ast.literal_eval(cell)
+            if isinstance(parsed, list):
+                return parsed
+        except (ValueError, SyntaxError):
+            pass
     return cell
 
 
@@ -119,10 +131,13 @@ class BulkUpdate:
                     # Convert each cell to the appropriate Python type.
                     converted = [convert_cell(cell) for cell in row]
 
-                    # Estimate the UTF-8 size of this row for chunking purposes.
-                    # The +3 accounts for the surrounding brackets and separating
-                    # comma when this row is serialised as part of the params list.
-                    added_size = sum(utf8len(str(cell)) for cell in converted) + 3
+                    # Measure the serialised byte size of this row using json.dumps,
+                    # which is a conservative proxy for the FalkorDB client's
+                    # stringify_param_value encoding (same quoting/escaping for strings,
+                    # same numeric formatting, same null/bool literals).  This prevents
+                    # batches from exceeding Redis's proto-max-bulk-len limit.
+                    # +1 accounts for the separator comma between rows in the list.
+                    added_size = utf8len(json.dumps(converted, ensure_ascii=False)) + 1
 
                     # Emit the current buffer if the max token size would be exceeded.
                     if self.buffer_size + added_size > self.max_token_size:
