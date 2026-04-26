@@ -73,7 +73,7 @@ class RelationType(EntityFile):
 
                     src = self.query_buffer.nodes[start_id]
                     dest = self.query_buffer.nodes[end_id]
-                except KeyError as e:
+                except KeyError:
                     print(
                         "%s:%d Relationship specified a non-existent identifier. src: %s; dest: %s"
                         % (
@@ -84,7 +84,7 @@ class RelationType(EntityFile):
                         )
                     )
                     if self.config.skip_invalid_edges is False:
-                        raise e
+                        raise
                     continue
                 fmt = "=QQ"  # 8-byte unsigned ints for src and dest
                 try:
