@@ -508,6 +508,7 @@ class TestBulkLoader:
             ["美國人"],
         ]
 
+        assert len(query_result.result_set) == len(expected_strs)
         for i, j in zip(query_result.result_set, expected_strs):
             assert i == j
 
