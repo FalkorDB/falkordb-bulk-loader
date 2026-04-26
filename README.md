@@ -46,7 +46,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags             | Parameter                                                              |
 |:-----:|----------------------------|------------------------------------------------------------------------|
-|  -u   | --redis-url TEXT           | Server URL (default: redis://127.0.0.1:6379)                           |
+|  -u   | --server-url TEXT          | Server URL (default: redis://127.0.0.1:6379)                           |
 |  -n   | --nodes TEXT               | Path to Node CSV file with the filename as the Node Label              |
 |  -N   | --nodes-with-label TEXT    | Node Label followed by path to Node CSV file                           |
 |  -r   | --relations TEXT           | Path to Relationship CSV file with the filename as the Relationship Type  |
@@ -208,10 +208,7 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags           | Parameter                                                  |
 |:-----:|--------------------------|------------------------------------------------------------|
-|  -h   | --host TEXT              | Server host (default: 127.0.0.1)                           |
-|  -p   | --port INTEGER           | Server port (default: 6379)                                |
-|  -a   | --password TEXT          | Server password (default: none)                            |
-|  -u   | --unix-socket-path TEXT  | Unix socket path (default: none)                           |
+|  -u   | --server-url TEXT        | Server URL (default: falkor://127.0.0.1:6379)              |
 |  -q   | --query TEXT             | Query to run on server                                     |
 |  -v   | --variable-name TEXT     | Variable name for row array in queries (default: row)      |
 |  -c   | --csv TEXT               | Path to CSV input file                                     |
