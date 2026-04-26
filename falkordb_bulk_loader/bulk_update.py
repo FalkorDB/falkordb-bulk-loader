@@ -20,7 +20,9 @@ def utf8len(s):
 # before handing the cell to ``ast.literal_eval``.  The lookarounds prevent us
 # from rewriting tokens that appear inside string literals (e.g. ``'truthy'``)
 # or as part of longer identifiers.
-_CYPHER_LITERAL_RE = re.compile(r"(?<![A-Za-z0-9_'\"])(true|false|null)(?![A-Za-z0-9_'\"])")
+_CYPHER_LITERAL_RE = re.compile(
+    r"(?<![A-Za-z0-9_'\"])(true|false|null)(?![A-Za-z0-9_'\"])"
+)
 _CYPHER_TO_PYTHON = {"true": "True", "false": "False", "null": "None"}
 
 
