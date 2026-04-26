@@ -2,6 +2,7 @@ import ast
 import csv
 import json
 import math
+import re
 import sys
 from timeit import default_timer as timer
 
@@ -12,6 +13,15 @@ from falkordb import FalkorDB
 
 def utf8len(s):
     return len(s.encode("utf-8"))
+
+
+# Match Cypher-style boolean/null tokens (lowercase ``true``/``false``/``null``)
+# as standalone words, so we can substitute them with their Python equivalents
+# before handing the cell to ``ast.literal_eval``.  The lookarounds prevent us
+# from rewriting tokens that appear inside string literals (e.g. ``'truthy'``)
+# or as part of longer identifiers.
+_CYPHER_LITERAL_RE = re.compile(r"(?<![A-Za-z0-9_'\"])(true|false|null)(?![A-Za-z0-9_'\"])")
+_CYPHER_TO_PYTHON = {"true": "True", "false": "False", "null": "None"}
 
 
 # Count number of rows in file.
@@ -30,7 +40,10 @@ def convert_cell(cell):
     existing Cypher guards such as ``row[i] <> ''`` continue to work.
     Array-literal cells (e.g. ``[1,'nested_str']``) are parsed into Python
     lists so that FalkorDB stores them as array properties, preserving the
-    behaviour of the original bulk updater.
+    behaviour of the original bulk updater.  Both Python literal syntax
+    (``[True, False, None]``) and Cypher literal syntax
+    (``[true, false, null]``) are accepted; the lowercase Cypher keywords are
+    rewritten to their Python equivalents before parsing.
     """
     cell = cell.strip()
     if cell == "":
@@ -51,12 +64,26 @@ def convert_cell(cell):
     if cell.lower() == "false":
         return False
     if cell.startswith("[") and cell.endswith("]"):
+        # Try Python literal syntax first ([1, 'a', True, None]).
         try:
             parsed = ast.literal_eval(cell)
             if isinstance(parsed, list):
                 return parsed
         except (ValueError, SyntaxError):
             pass
+        # Fall back to Cypher-style literals ([true, false, null]) by rewriting
+        # the lowercase keywords to their Python equivalents and retrying.  The
+        # regex skips tokens that appear inside string literals.
+        if _CYPHER_LITERAL_RE.search(cell):
+            rewritten = _CYPHER_LITERAL_RE.sub(
+                lambda m: _CYPHER_TO_PYTHON[m.group(1)], cell
+            )
+            try:
+                parsed = ast.literal_eval(rewritten)
+                if isinstance(parsed, list):
+                    return parsed
+            except (ValueError, SyntaxError):
+                pass
     return cell
 
 
@@ -138,6 +165,18 @@ class BulkUpdate:
                     # batches from exceeding Redis's proto-max-bulk-len limit.
                     # +1 accounts for the separator comma between rows in the list.
                     added_size = utf8len(json.dumps(converted, ensure_ascii=False)) + 1
+
+                    # A single row larger than the configured budget cannot be
+                    # batched safely.  Raising here avoids emitting an empty
+                    # batch followed by an oversized one that the server would
+                    # reject with a cryptic proto-max-bulk-len error.
+                    if added_size > self.max_token_size:
+                        raise ValueError(
+                            f"Row exceeds max token size "
+                            f"({added_size} bytes > {self.max_token_size} bytes "
+                            f"after subtracting the query envelope). "
+                            f"Increase --max-token-size or split the row."
+                        )
 
                     # Emit the current buffer if the max token size would be exceeded.
                     if self.buffer_size + added_size > self.max_token_size:

@@ -234,5 +234,5 @@ Row values are passed to the server as Cypher parameters, so special characters 
 
 - **Integer / float**: numeric strings are inferred automatically.
 - **Boolean**: the strings `true` and `false` (case-insensitive) become booleans.
-- **Array**: cells that start with `[` and end with `]` are parsed as Python literal arrays (e.g. `[1,'nested_str']`), which FalkorDB stores as array properties.  Cells that look like brackets but are not valid Python literals (e.g. `[not an array]`) are kept as strings.
+- **Array**: cells that start with `[` and end with `]` are parsed as list literals, which FalkorDB stores as array properties.  Both Python syntax (`[1, 'nested_str', True, None]`) and Cypher syntax (`[1, 'nested_str', true, null]` — lowercase `true` / `false` / `null`) are accepted.  Cells that look like brackets but are not valid list literals (e.g. `[not an array]`) are kept as strings.
 - **String**: all other values are passed as plain strings.  Empty cells are passed as the empty string `""`, so existing Cypher guards like `CASE WHEN row[i] <> '' THEN …` continue to work as expected.

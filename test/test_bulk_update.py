@@ -490,6 +490,23 @@ class TestConvertCell:
             assert isinstance(result, str), f"Expected str for {token!r}, got {type(result)}"
             assert result == token.strip()
 
+    def test_array_cypher_style_booleans_and_null(self):
+        """Lowercase Cypher-style ``true``/``false``/``null`` inside brackets parse as a list."""
+        assert convert_cell("[true, false, null]") == [True, False, None]
+
+    def test_array_cypher_style_mixed(self):
+        assert convert_cell("[1, 'a', true, null]") == [1, "a", True, None]
+
+    def test_array_cypher_style_does_not_corrupt_string_contents(self):
+        """``true``/``false``/``null`` inside string literals must remain strings."""
+        assert convert_cell("['true', 'null', 'false']") == ["true", "null", "false"]
+
+    def test_array_cypher_keyword_substring_not_rewritten(self):
+        """Identifiers containing ``true``/``false``/``null`` as a substring stay as-is."""
+        # ``truthy`` / ``nullable`` shouldn't be partially rewritten — the cell falls
+        # through to a plain string because it's not a valid list literal either way.
+        assert convert_cell("[truthy, nullable]") == "[truthy, nullable]"
+
 
 # ---------------------------------------------------------------------------
 # Integration tests for tricky CSV cells – require a running FalkorDB
