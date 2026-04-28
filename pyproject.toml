@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 falkordb-bulk-update = "falkordb_bulk_loader.bulk_update:bulk_update"
 falkordb-bulk-insert = "falkordb_bulk_loader.bulk_insert:bulk_insert"
+falkordb-mtx-insert = "falkordb_bulk_loader.mtx_insert:mtx_insert"
 
 [project.urls]
 Homepage = "https://falkordb.com"
