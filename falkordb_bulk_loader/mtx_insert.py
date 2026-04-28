@@ -111,11 +111,13 @@ def _pack_reltype_header(rel_type, attr_name, field):
     if attr_name:
         attr_enc = attr_name.encode()
         return struct.pack(
-            f"={len(rel_enc)+1}sI{len(attr_enc)+1}s",
-            rel_enc, 1, attr_enc,
+            f"={len(rel_enc) + 1}sI{len(attr_enc) + 1}s",
+            rel_enc,
+            1,
+            attr_enc,
         )
     else:
-        return struct.pack(f"={len(rel_enc)+1}sI", rel_enc, 0)
+        return struct.pack(f"={len(rel_enc) + 1}sI", rel_enc, 0)
 
 
 def _pack_value(value, field):
@@ -126,7 +128,7 @@ def _pack_value(value, field):
         return struct.pack("=Bq", Type.LONG.value, value)
     else:  # complex — already formatted as a string like "1.5+2.3i"
         enc = value.encode()
-        return struct.pack(f"=B{len(enc)+1}s", Type.STRING.value, enc)
+        return struct.pack(f"=B{len(enc) + 1}s", Type.STRING.value, enc)
 
 
 def _bulk_send_edges(conn, graphname, rel_header, batch, field, use_attr):
@@ -138,8 +140,12 @@ def _bulk_send_edges(conn, graphname, rel_header, batch, field, use_attr):
         if use_attr:
             rows += _pack_value(e[2], field)
     conn.execute_command(
-        "GRAPH.BULK", graphname,
-        0, len(batch), 0, 1,
+        "GRAPH.BULK",
+        graphname,
+        0,
+        len(batch),
+        0,
+        1,
         rel_header + bytes(rows),
     )
 
@@ -241,14 +247,18 @@ def mtx_insert(graph, mtx_file, server_url, node_label, relation_type, attr_name
     # Internal node IDs are known from the sequential creation above — no
     # index or MATCH needed.
     print(f"Loading {nnz} stored entries...")
-    rel_header = _pack_reltype_header(relation_type, attr_name if use_attr else None, field)
+    rel_header = _pack_reltype_header(
+        relation_type, attr_name if use_attr else None, field
+    )
     conn = client.connection
 
     pool = Pool(nodes=1)
     tasks = []
 
     def _submit(batch):
-        task = pool.apipe(_bulk_send_edges, conn, graph, rel_header, batch, field, use_attr)
+        task = pool.apipe(
+            _bulk_send_edges, conn, graph, rel_header, batch, field, use_attr
+        )
         tasks.append(task)
         if len(tasks) >= _PIPELINE_DEPTH:
             tasks.pop(0).get()
@@ -258,8 +268,8 @@ def mtx_insert(graph, mtx_file, server_url, node_label, relation_type, attr_name
     edges_created = 0
 
     with _open_mtx(mtx_file) as f:
-        f.readline()       # skip %%MatrixMarket header
-        _read_size_line(f) # skip comments + size line
+        f.readline()  # skip %%MatrixMarket header
+        _read_size_line(f)  # skip comments + size line
 
         with click.progressbar(length=nnz, label="Loading edges") as bar:
             for line in f:

@@ -81,10 +81,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate real general\n"
-            "3 3 2\n"
-            "1 2 1.5\n"
-            "2 3 2.5\n",
+            "%%MatrixMarket matrix coordinate real general\n3 3 2\n1 2 1.5\n2 3 2.5\n",
         )
         res = self._invoke("mtx_real_attr", path, ["--attr-name", "weight"])
         assert res.exit_code == 0, res.output
@@ -146,9 +143,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate integer general\n"
-            "3 3 1\n"
-            "1 3 42\n",
+            "%%MatrixMarket matrix coordinate integer general\n3 3 1\n1 3 42\n",
         )
         res = self._invoke("mtx_integer", path, ["--attr-name", "val"])
         assert res.exit_code == 0, res.output
@@ -174,9 +169,7 @@ class TestMtxInsert:
         assert res.exit_code == 0, res.output
 
         g = self.db_con.select_graph("mtx_complex")
-        values = {
-            r[0] for r in g.query("MATCH ()-[r]->() RETURN r.z").result_set
-        }
+        values = {r[0] for r in g.query("MATCH ()-[r]->() RETURN r.z").result_set}
         assert "1.0+2.0i" in values
         assert "3.0-1.0i" in values
 
@@ -188,9 +181,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate pattern general\n"
-            "3 3 1\n"
-            "1 2\n",
+            "%%MatrixMarket matrix coordinate pattern general\n3 3 1\n1 2\n",
         )
         res = self._invoke(
             "mtx_custom_labels",
@@ -211,10 +202,7 @@ class TestMtxInsert:
         path = self._tmpfile(suffix=".mtx.gz")
         write_mtx_gz(
             path,
-            "%%MatrixMarket matrix coordinate pattern general\n"
-            "3 3 2\n"
-            "1 2\n"
-            "2 3\n",
+            "%%MatrixMarket matrix coordinate pattern general\n3 3 2\n1 2\n2 3\n",
         )
         res = self._invoke("mtx_gzip", path)
         assert res.exit_code == 0, res.output
@@ -231,9 +219,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate pattern general\n"
-            "2 2 1\n"
-            "1 2\n",
+            "%%MatrixMarket matrix coordinate pattern general\n2 2 1\n1 2\n",
         )
         # Create it once
         res = self._invoke("mtx_existing", path)
@@ -252,9 +238,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate pattern general\n"
-            "3 5 1\n"
-            "1 2\n",
+            "%%MatrixMarket matrix coordinate pattern general\n3 5 1\n1 2\n",
         )
         res = self.runner.invoke(mtx_insert, ["mtx_nonsquare", path])
         assert res.exit_code != 0
@@ -267,9 +251,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate complex hermitian\n"
-            "2 2 1\n"
-            "2 1 1.0 0.5\n",
+            "%%MatrixMarket matrix coordinate complex hermitian\n2 2 1\n2 1 1.0 0.5\n",
         )
         res = self.runner.invoke(mtx_insert, ["mtx_hermitian", path])
         assert res.exit_code != 0
@@ -282,9 +264,7 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix array real general\n"
-            "2 2\n"
-            "1.0\n2.0\n3.0\n4.0\n",
+            "%%MatrixMarket matrix array real general\n2 2\n1.0\n2.0\n3.0\n4.0\n",
         )
         res = self.runner.invoke(mtx_insert, ["mtx_array", path])
         assert res.exit_code != 0
@@ -297,11 +277,11 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate pattern general\n"
-            "2 2 1\n"
-            "1 2\n",
+            "%%MatrixMarket matrix coordinate pattern general\n2 2 1\n1 2\n",
         )
-        res = self.runner.invoke(mtx_insert, ["mtx_badlabel", path, "--node-label", "bad-label"])
+        res = self.runner.invoke(
+            mtx_insert, ["mtx_badlabel", path, "--node-label", "bad-label"]
+        )
         assert res.exit_code != 0
         assert "valid Cypher identifier" in res.output
 
@@ -313,16 +293,13 @@ class TestMtxInsert:
         path = self._tmpfile()
         write_mtx(
             path,
-            "%%MatrixMarket matrix coordinate pattern general\n"
-            "3 3 0\n",
+            "%%MatrixMarket matrix coordinate pattern general\n3 3 0\n",
         )
         res = self._invoke("mtx_node_ids", path)
         assert res.exit_code == 0, res.output
 
         g = self.db_con.select_graph("mtx_node_ids")
-        ids = sorted(
-            r[0] for r in g.query("MATCH (n:Node) RETURN n.id").result_set
-        )
+        ids = sorted(r[0] for r in g.query("MATCH (n:Node) RETURN n.id").result_set)
         assert ids == [1, 2, 3]
 
     # ------------------------------------------------------------------
