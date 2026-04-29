@@ -46,7 +46,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags             | Parameter                                                              |
 |:-----:|----------------------------|------------------------------------------------------------------------|
-|  -u   | --redis-url TEXT           | Server URL (default: redis://127.0.0.1:6379)                           |
+|  -u   | --server-url TEXT          | Server URL (default: redis://127.0.0.1:6379)                           |
 |  -n   | --nodes TEXT               | Path to Node CSV file with the filename as the Node Label              |
 |  -N   | --nodes-with-label TEXT    | Node Label followed by path to Node CSV file                           |
 |  -r   | --relations TEXT           | Path to Relationship CSV file with the filename as the Relationship Type  |
@@ -62,6 +62,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 |  -c   | --max-token-size INT       | (Debug argument) Max size (MBs) of each token sent to the server (default 64) |
 |  -i   | --index Label:Property     | After bulk import, create an Index on provided Label:Property pair (optional) |
 |  -f   | --full-text-index Label:Property | After bulk import, create a full-text index on provided Label:Property pair (optional) |
+|       | --verbose                  | Print extra information about the steps performed during loading       |
 
 The only required arguments are the name to give the newly-created graph (which can appear anywhere) and at least one node CSV file.
 The nodes and relationship flags should be specified once per input file.
@@ -208,16 +209,14 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags           | Parameter                                                  |
 |:-----:|--------------------------|------------------------------------------------------------|
-|  -h   | --host TEXT              | Server host (default: 127.0.0.1)                           |
-|  -p   | --port INTEGER           | Server port (default: 6379)                                |
-|  -a   | --password TEXT          | Server password (default: none)                            |
-|  -u   | --unix-socket-path TEXT  | Unix socket path (default: none)                           |
+|  -u   | --server-url TEXT        | Server URL (default: falkor://127.0.0.1:6379)              |
 |  -q   | --query TEXT             | Query to run on server                                     |
 |  -v   | --variable-name TEXT     | Variable name for row array in queries (default: row)      |
 |  -c   | --csv TEXT               | Path to CSV input file                                     |
 |  -o   | --separator TEXT         | Field token separator in CSV file                          |
 |  -n   | --no-header              | If set, the CSV file has no header                         |
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
+|       | --verbose                | Print extra information about the steps performed during the update |
 
 The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query.
 
@@ -229,3 +228,14 @@ falkordb-bulk-update SocialGraph --csv FOLLOWS.csv --query "MATCH (start {id: ro
 ```
 
 When using the bulk updater, it is essential to sanitize CSV inputs beforehand, as falkordb *will* commit changes to the graph incrementally. As such, malformed inputs may leave the graph in a partially-updated state.
+
+## Diagnostics: dumping a stack trace on demand
+
+Both `falkordb-bulk-insert` and `falkordb-bulk-update` install a `SIGUSR1` handler at start up. Sending `SIGUSR1` to a running loader process will write the tracebacks of all Python threads to `stderr`, which is useful for diagnosing hangs or unexpectedly slow loads without attaching a debugger:
+
+```sh
+kill -SIGUSR1 <pid>
+```
+
+This feature relies on Python's `faulthandler` module and is only available on platforms that support `SIGUSR1` (i.e. not Windows). On unsupported platforms registration is silently skipped and the loaders behave as before.
+

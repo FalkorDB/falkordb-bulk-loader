@@ -1,3 +1,4 @@
+import logging
 import sys
 from timeit import default_timer as timer
 
@@ -10,6 +11,9 @@ from .exceptions import CSVError
 from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
+from .stacktrace import register_stacktrace_dump_handler
+
+logger = logging.getLogger(__name__)
 
 
 def parse_schemas(cls, query_buf, path_to_csv, csv_tuples, config):
@@ -142,6 +146,12 @@ def process_entities(entities):
     multiple=True,
     help="Label:Propery on which to create an full text search index",
 )
+@click.option(
+    "--verbose",
+    default=False,
+    is_flag=True,
+    help="Print extra information about the steps performed during loading",
+)
 def bulk_insert(
     graph,
     server_url,
@@ -161,9 +171,20 @@ def bulk_insert(
     max_token_size,
     index,
     full_text_index,
+    verbose,
 ):
-    if sys.version_info.major < 3 or sys.version_info.minor < 6:
-        raise Exception("Python >= 3.6 is required for the falkordb bulk loader.")
+    if sys.version_info < (3, 10):
+        raise RuntimeError("Python >= 3.10 is required for the falkordb bulk loader.")
+
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
+
+    # Allow operators to dump stack traces of all threads via `kill -SIGUSR1 <pid>`.
+    register_stacktrace_dump_handler()
 
     if not (any(nodes) or any(nodes_with_label)):
         raise Exception("At least one node file must be specified.")
@@ -188,49 +209,64 @@ def bulk_insert(
         escapechar,
     )
 
-    redis_con = redis.from_url(server_url)
+    logger.debug(f"Connecting to FalkorDB server at '{server_url}'...")
+
     client = FalkorDB.from_url(server_url)
 
     # Attempt to connect to the server
     try:
-        redis_con.ping()
+        client.connection.ping()
     except redis.exceptions.ConnectionError as e:
-        print("Could not connect to FalkorDB server.")
+        logger.error("Could not connect to FalkorDB server.")
         raise e
+
+    logger.debug("Connected to FalkorDB server.")
 
     # Attempt to verify that falkordb module is loaded
     try:
-        module_list = [m[b"name"] for m in redis_con.module_list()]
-        if b"graph" not in module_list:
-            print("falkordb module not loaded on connected server.")
+        module_list = [m["name"] for m in client.connection.module_list()]
+        if "graph" not in module_list:
+            logger.error("falkordb module not loaded on connected server.")
             sys.exit(1)
+        logger.debug("FalkorDB module is loaded on the server.")
     except redis.exceptions.ResponseError:
         # Ignore check if the connected server does not support the "MODULE LIST" command
-        pass
+        logger.debug(
+            "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
+        )
 
     # Verify that the graph name is not already used in the Redis database
-    key_exists = redis_con.exists(graph)
+    key_exists = client.connection.exists(graph)
     if key_exists:
-        print(
+        logger.error(
             f"Graph with name '{graph}', could not be created, as '{graph}' already exists."
         )
         sys.exit(1)
 
+    logger.debug(f"Graph name '{graph}' is available.")
+
     query_buf = QueryBuffer(graph, client, config)
 
     # Read the header rows of each input CSV and save its schema.
+    logger.debug("Parsing node CSV schemas...")
     labels = parse_schemas(Label, query_buf, nodes, nodes_with_label, config)
+    logger.debug(f"Parsed {len(labels)} node CSV file(s).")
+    logger.debug("Parsing relation CSV schemas...")
     reltypes = parse_schemas(
         RelationType, query_buf, relations, relations_with_type, config
     )
+    logger.debug(f"Parsed {len(reltypes)} relation CSV file(s).")
 
     try:
+        logger.debug("Processing nodes...")
         process_entities(labels)
+        logger.debug("Processing relations...")
         process_entities(reltypes)
     except CSVError as e:
         sys.exit(str(e))
 
     # Send all remaining tokens to Redis
+    logger.debug("Flushing remaining buffered data to FalkorDB...")
     query_buf.send_buffer()
     query_buf.wait_pool()
 
@@ -241,26 +277,26 @@ def bulk_insert(
     graph = client.select_graph(graph)
     for i in index:
         l, p = i.split(":")
-        print(f"Creating Index on Label: {l}, Property: {p}")
+        logger.info(f"Creating Index on Label: {l}, Property: {p}")
         try:
             graph.create_node_range_index(l, p)
         except redis.exceptions.ResponseError as e:
-            print(f"Unable to create Index on Label: {l}, Property {p}")
-            print(e)
+            logger.error(f"Unable to create Index on Label: {l}, Property {p}")
+            logger.error(e)
 
     # Add in Full Text Search Indices after graph creation
     for i in full_text_index:
         l, p = i.split(":")
-        print(f"Creating Full Text Search Index on Label: {l}, Property: {p}")
+        logger.info(f"Creating Full Text Search Index on Label: {l}, Property: {p}")
         try:
             graph.create_node_fulltext_index(l, p)
         except redis.exceptions.ResponseError as e:
-            print(
+            logger.error(
                 f"Unable to create Full Text Search Index on Label: {l}, Property {p}"
             )
-            print(e)
+            logger.error(e)
         except Exception:
-            print(
+            logger.error(
                 f"Unknown Error: Unable to create Full Text Search Index on Label: {l}, Property {p}"
             )
 
