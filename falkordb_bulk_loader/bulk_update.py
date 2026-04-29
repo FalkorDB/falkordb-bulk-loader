@@ -65,13 +65,13 @@ class BulkUpdate:
 
     def emit_buffer(self, rows):
         command = " ".join([rows, self.query])
+        self.buffers_sent += 1
         if self.verbose:
             print(
-                f"Sending buffer #{self.buffers_sent + 1} "
+                f"Sending buffer #{self.buffers_sent} "
                 f"({utf8len(command)} bytes) to FalkorDB..."
             )
         result = self.graph.query(command)
-        self.buffers_sent += 1
         self.update_statistics(result)
 
     def quote_string(self, cell):
