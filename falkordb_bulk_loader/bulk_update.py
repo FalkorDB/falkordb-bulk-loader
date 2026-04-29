@@ -87,7 +87,10 @@ class BulkUpdate:
             return cell
 
         # Already-quoted strings (single- or double-quoted) are emitted verbatim.
-        if (cell[0] == '"' and cell[-1] == '"') or (cell[0] == "'" and cell[-1] == "'"):
+        # len >= 2 guards against a lone quote character matching both ends.
+        if len(cell) >= 2 and (
+            (cell[0] == '"' and cell[-1] == '"') or (cell[0] == "'" and cell[-1] == "'")
+        ):
             return cell
 
         # Otherwise wrap in double quotes, escaping any embedded backslashes
@@ -113,7 +116,6 @@ class BulkUpdate:
                 f,
                 delimiter=self.separator,
                 skipinitialspace=True,
-                quoting=csv.QUOTE_NONE,
                 escapechar="\\",
             )
 

@@ -150,7 +150,7 @@ class TestBulkUpdate:
         )
 
         # Validate that the expected results are all present in the graph
-        expected_result = [[0, 1.5, True, "string", "[1,'nested_str']"]]
+        expected_result = [[0, 1.5, True, "string", [1, "nested_str"]]]
         assert query_result.result_set == expected_result
 
     def test_custom_delimiter(self):
