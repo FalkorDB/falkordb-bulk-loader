@@ -268,7 +268,9 @@ def bulk_update(
 
     for key, value in updater.statistics.items():
         logger.info(key + ": " + repr(value))
-    logger.info(f"Update of graph '{graph}' complete in {end_time - start_time:f} seconds")
+    logger.info(
+        f"Update of graph '{graph}' complete in {end_time - start_time:f} seconds"
+    )
 
 
 if __name__ == "__main__":

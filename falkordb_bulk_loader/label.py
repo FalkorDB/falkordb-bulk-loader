@@ -116,4 +116,6 @@ class Label(EntityFile):
                 self.binary_entities.append(row_binary)
             self.query_buffer.labels.append(self.to_binary())
         self.infile.close()
-        logger.info("%d nodes created with label '%s'" % (entities_created, self.entity_str))
+        logger.info(
+            "%d nodes created with label '%s'" % (entities_created, self.entity_str)
+        )
