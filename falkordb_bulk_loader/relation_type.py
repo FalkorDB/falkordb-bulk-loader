@@ -119,6 +119,7 @@ class RelationType(EntityFile):
             try:
                 self.infile.close()
             except OSError:
+                # Best-effort cleanup: ignore close errors because processing is complete.
                 pass
         print(
             "%d relations created for type '%s'" % (entities_created, self.entity_str)
