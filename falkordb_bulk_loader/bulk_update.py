@@ -205,6 +205,8 @@ def bulk_update(
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stdout,
+        force=True,
     )
 
     # Allow operators to dump stack traces of all threads via `kill -SIGUSR1 <pid>`.
@@ -218,7 +220,7 @@ def bulk_update(
     try:
         client.connection.ping()
     except redis.exceptions.ConnectionError as e:
-        print("Could not connect to server.")
+        logger.error("Could not connect to server.")
         raise e
 
     logger.debug("Connected to FalkorDB server.")
@@ -227,7 +229,7 @@ def bulk_update(
     try:
         module_list = [m["name"] for m in client.connection.module_list()]
         if "graph" not in module_list:
-            print("FalkorDB module not loaded on connected server.")
+            logger.error("FalkorDB module not loaded on connected server.")
             sys.exit(1)
         logger.debug("FalkorDB module is loaded on the server.")
     except redis.exceptions.ResponseError:
@@ -265,8 +267,8 @@ def bulk_update(
     end_time = timer()
 
     for key, value in updater.statistics.items():
-        print(key + ": " + repr(value))
-    print(f"Update of graph '{graph}' complete in {end_time - start_time:f} seconds")
+        logger.info(key + ": " + repr(value))
+    logger.info(f"Update of graph '{graph}' complete in {end_time - start_time:f} seconds")
 
 
 if __name__ == "__main__":

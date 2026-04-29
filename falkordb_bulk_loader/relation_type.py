@@ -81,7 +81,7 @@ class RelationType(EntityFile):
                     src = self.query_buffer.nodes[start_id]
                     dest = self.query_buffer.nodes[end_id]
                 except KeyError:
-                    print(
+                    logger.error(
                         "%s:%d Relationship specified a non-existent identifier. src: %s; dest: %s"
                         % (
                             self.infile.name,
@@ -121,6 +121,6 @@ class RelationType(EntityFile):
                 self.binary_entities.append(row_binary)
             self.query_buffer.reltypes.append(self.to_binary())
         self.infile.close()
-        print(
+        logger.info(
             "%d relations created for type '%s'" % (entities_created, self.entity_str)
         )

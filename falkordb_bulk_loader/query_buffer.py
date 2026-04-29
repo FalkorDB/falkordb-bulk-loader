@@ -1,4 +1,8 @@
+import logging
+
 from pathos.pools import ThreadPool as Pool
+
+logger = logging.getLogger(__name__)
 
 
 def run(client, graphname, args):
@@ -91,7 +95,7 @@ class QueryBuffer:
         self.relations_created += int(stats[1].split(" ")[0])
 
     def report_completion(self, runtime):
-        print(
+        logger.info(
             "Construction of graph '%s' complete: %d nodes created, %d relations created in %f seconds"
             % (self.graphname, self.nodes_created, self.relations_created, runtime)
         )
