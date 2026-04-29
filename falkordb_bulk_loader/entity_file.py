@@ -265,6 +265,12 @@ class EntityFile(object):
                     f"{self.infile.name}: Field '{field}' had {len(pair) - 1} colons"
                 )
 
+            # Missing colon means the field is not a valid name:type pair.
+            if len(pair) < 2:
+                raise CSVError(
+                    f"{self.infile.name}: Field '{field}' is missing a colon separator"
+                )
+
             # Convert the column type.
             col_type = convert_schema_type(pair[1].upper().strip())
 
