@@ -1,5 +1,9 @@
+import ast
 import csv
+import json
 import logging
+import math
+import re
 import sys
 from timeit import default_timer as timer
 
@@ -16,12 +20,78 @@ def utf8len(s):
     return len(s.encode("utf-8"))
 
 
+# Match Cypher-style boolean/null tokens (lowercase ``true``/``false``/``null``)
+# as standalone words, so we can substitute them with their Python equivalents
+# before handing the cell to ``ast.literal_eval``.  The lookarounds prevent us
+# from rewriting tokens that appear inside string literals (e.g. ``'truthy'``)
+# or as part of longer identifiers.
+_CYPHER_LITERAL_RE = re.compile(
+    r"(?<![A-Za-z0-9_'\"])(true|false|null)(?![A-Za-z0-9_'\"])"
+)
+_CYPHER_TO_PYTHON = {"true": "True", "false": "False", "null": "None"}
+
+
 # Count number of rows in file.
 def count_entities(filename):
     entities_count = 0
     with open(filename, "rt") as f:
         entities_count = sum(1 for line in f)
     return entities_count
+
+
+def convert_cell(cell):
+    """Convert a CSV cell string to the most appropriate Python scalar.
+
+    Conversion order: int -> float -> bool -> list -> str.
+    Empty / whitespace-only cells are returned as an empty string so that
+    existing Cypher guards such as ``row[i] <> ''`` continue to work.
+    Array-literal cells (e.g. ``[1,'nested_str']``) are parsed into Python
+    lists so that FalkorDB stores them as array properties, preserving the
+    behaviour of the original bulk updater.  Both Python literal syntax
+    (``[True, False, None]``) and Cypher literal syntax
+    (``[true, false, null]``) are accepted; the lowercase Cypher keywords are
+    rewritten to their Python equivalents before parsing.
+    """
+    cell = cell.strip()
+    if cell == "":
+        return ""
+    try:
+        return int(cell)
+    except ValueError:
+        pass
+    try:
+        val = float(cell)
+        if math.isnan(val) or math.isinf(val):
+            return cell  # keep "NaN"/"Infinity"/etc. as a string
+        return val
+    except ValueError:
+        pass
+    if cell.lower() == "true":
+        return True
+    if cell.lower() == "false":
+        return False
+    if cell.startswith("[") and cell.endswith("]"):
+        # Try Python literal syntax first ([1, 'a', True, None]).
+        try:
+            parsed = ast.literal_eval(cell)
+            if isinstance(parsed, list):
+                return parsed
+        except (ValueError, SyntaxError):
+            pass
+        # Fall back to Cypher-style literals ([true, false, null]) by rewriting
+        # the lowercase keywords to their Python equivalents and retrying.  The
+        # regex skips tokens that appear inside string literals.
+        if _CYPHER_LITERAL_RE.search(cell):
+            rewritten = _CYPHER_LITERAL_RE.sub(
+                lambda m: _CYPHER_TO_PYTHON[m.group(1)], cell
+            )
+            try:
+                parsed = ast.literal_eval(rewritten)
+                if isinstance(parsed, list):
+                    return parsed
+            except (ValueError, SyntaxError):
+                pass
+    return cell
 
 
 class BulkUpdate:
@@ -67,37 +137,18 @@ class BulkUpdate:
         self.statistics[key] = val
 
     def emit_buffer(self, rows):
-        command = " ".join([rows, self.query])
         self.buffers_sent += 1
         logger.debug(
             f"Sending buffer #{self.buffers_sent} "
-            f"({utf8len(command)} bytes) to FalkorDB..."
+            f"({self.buffer_size} bytes) to FalkorDB..."
         )
-        result = self.graph.query(command)
+        result = self.graph.query(self.query, params={"rows": rows})
         self.update_statistics(result)
-
-    def quote_string(self, cell):
-        cell = cell.strip()
-        # Quote-interpolate cell if it is an unquoted string.
-        try:
-            float(cell)  # Check for numeric
-        except ValueError:
-            if (
-                (cell.lower() != "false" and cell.lower() != "true")
-                and (cell[0] != "[" and cell.lower != "]")  # Check for boolean
-                and (cell[0] != '"' and cell[-1] != '"')  # Check for array
-                and (  # Check for double-quoted string
-                    cell[0] != "'" and cell[-1] != "'"
-                )
-            ):  # Check for single-quoted string
-                cell = "".join(['"', cell, '"'])
-        return cell
 
     # Raise an exception if the query triggers a compile-time error
     def validate_query(self):
-        command = " ".join(["CYPHER rows=[]", self.query])
-        # The plan call will raise an error if the query is malformed or invalid.
-        self.graph.explain(command)
+        # The explain call will raise an error if the query is malformed or invalid.
+        self.graph.explain(self.query, params={"rows": []})
 
     def process_update_csv(self):
         entity_count = count_entities(self.filename)
@@ -110,36 +161,46 @@ class BulkUpdate:
                 f,
                 delimiter=self.separator,
                 skipinitialspace=True,
-                quoting=csv.QUOTE_NONE,
-                escapechar="\\",
             )
 
-            rows_strs = []
+            rows = []
             with click.progressbar(
                 reader, length=entity_count, label=self.graph_name
             ) as reader:
                 for row in reader:
-                    # Prepare the string representation of the current row.
-                    row = ",".join([self.quote_string(cell) for cell in row])
-                    next_line = "".join(["[", row.strip(), "]"])
+                    # Convert each cell to the appropriate Python type.
+                    converted = [convert_cell(cell) for cell in row]
 
-                    # Emit buffer now if the max token size would be exceeded by this addition.
-                    added_size = (
-                        utf8len(next_line) + 1
-                    )  # Add one to compensate for the added comma.
+                    # Measure the serialised byte size of this row using json.dumps,
+                    # which is a conservative proxy for the FalkorDB client's
+                    # stringify_param_value encoding (same quoting/escaping for strings,
+                    # same numeric formatting, same null/bool literals).  This prevents
+                    # batches from exceeding Redis's proto-max-bulk-len limit.
+                    # +1 accounts for the separator comma between rows in the list.
+                    added_size = utf8len(json.dumps(converted, ensure_ascii=False)) + 1
+
+                    # A single row larger than the configured budget cannot be
+                    # batched safely.  Raising here avoids emitting an empty
+                    # batch followed by an oversized one that the server would
+                    # reject with a cryptic proto-max-bulk-len error.
+                    if added_size > self.max_token_size:
+                        raise ValueError(
+                            f"Row exceeds max token size "
+                            f"({added_size} bytes > {self.max_token_size} bytes "
+                            f"after subtracting the query envelope). "
+                            f"Increase --max-token-size or split the row."
+                        )
+
+                    # Emit the current buffer if the max token size would be exceeded.
                     if self.buffer_size + added_size > self.max_token_size:
-                        # Concatenate all rows into a valid parameter set
-                        buf = "".join(["CYPHER rows=[", ",".join(rows_strs), "]"])
-                        self.emit_buffer(buf)
-                        rows_strs = []
+                        self.emit_buffer(rows)
+                        rows = []
                         self.buffer_size = 0
 
-                    # Concatenate the string into the rows string representation.
-                    rows_strs.append(next_line)
+                    rows.append(converted)
                     self.buffer_size += added_size
-            # Concatenate all rows into a valid parameter set
-            buf = "".join(["CYPHER rows=[", ",".join(rows_strs), "]"])
-            self.emit_buffer(buf)
+
+            self.emit_buffer(rows)
 
 
 ################################################################################
