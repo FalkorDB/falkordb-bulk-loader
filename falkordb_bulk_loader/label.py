@@ -87,7 +87,7 @@ class Label(EntityFile):
                         raise SchemaError(
                             "%s:%d %s"
                             % (self.infile.name, self.reader.line_num - 1, str(e))
-                        )
+                        ) from e
                     row_binary_len = len(row_binary)
                     # If the addition of this entity will make the binary token grow too large,
                     # send the buffer now.
@@ -110,5 +110,8 @@ class Label(EntityFile):
                     self.binary_entities.append(row_binary)
                 self.query_buffer.labels.append(self.to_binary())
         finally:
-            self.infile.close()
+            try:
+                self.infile.close()
+            except OSError:
+                pass
         print("%d nodes created with label '%s'" % (entities_created, self.entity_str))

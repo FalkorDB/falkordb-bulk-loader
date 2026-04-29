@@ -94,7 +94,7 @@ class RelationType(EntityFile):
                         raise SchemaError(
                             "%s:%d %s"
                             % (self.infile.name, self.reader.line_num, str(e))
-                        )
+                        ) from e
                     row_binary_len = len(row_binary)
                     # If the addition of this entity will make the binary token grow too large,
                     # send the buffer now.
@@ -116,7 +116,10 @@ class RelationType(EntityFile):
                     self.binary_entities.append(row_binary)
                 self.query_buffer.reltypes.append(self.to_binary())
         finally:
-            self.infile.close()
+            try:
+                self.infile.close()
+            except OSError:
+                pass
         print(
             "%d relations created for type '%s'" % (entities_created, self.entity_str)
         )
