@@ -67,20 +67,37 @@ class BulkUpdate:
 
     def quote_string(self, cell):
         cell = cell.strip()
-        # Quote-interpolate cell if it is an unquoted string.
+        # Numeric values are emitted verbatim.
         try:
-            float(cell)  # Check for numeric
+            float(cell)
+            return cell
         except ValueError:
-            if (
-                (cell.lower() != "false" and cell.lower() != "true")
-                and (cell[0] != "[" and cell.lower != "]")  # Check for boolean
-                and (cell[0] != '"' and cell[-1] != '"')  # Check for array
-                and (  # Check for double-quoted string
-                    cell[0] != "'" and cell[-1] != "'"
-                )
-            ):  # Check for single-quoted string
-                cell = "".join(['"', cell, '"'])
-        return cell
+            pass
+
+        # Empty cells are emitted as the literal empty string.
+        if not cell:
+            return '""'
+
+        # Booleans are emitted verbatim.
+        if cell.lower() in ("true", "false"):
+            return cell
+
+        # Already-bracketed array literals are emitted verbatim.
+        if cell[0] == "[" and cell[-1] == "]":
+            return cell
+
+        # Already-quoted strings (single- or double-quoted) are emitted verbatim.
+        # len >= 2 guards against a lone quote character matching both ends.
+        if len(cell) >= 2 and (
+            (cell[0] == '"' and cell[-1] == '"') or (cell[0] == "'" and cell[-1] == "'")
+        ):
+            return cell
+
+        # Otherwise wrap in double quotes, escaping any embedded backslashes
+        # or double quotes so the result is a valid Cypher string literal and
+        # cannot be used to inject additional Cypher syntax.
+        escaped = cell.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
 
     # Raise an exception if the query triggers a compile-time error
     def validate_query(self):
@@ -99,7 +116,6 @@ class BulkUpdate:
                 f,
                 delimiter=self.separator,
                 skipinitialspace=True,
-                quoting=csv.QUOTE_NONE,
                 escapechar="\\",
             )
 
