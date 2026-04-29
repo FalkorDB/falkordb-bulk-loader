@@ -63,50 +63,59 @@ class Label(EntityFile):
 
     def process_entities(self):
         entities_created = 0
-        with click.progressbar(
-            self.reader,
-            length=self.entities_count,
-            label=self.entity_str,
-            update_min_steps=100,
-        ) as reader:
-            for row in reader:
-                self.validate_row(row)
+        try:
+            with click.progressbar(
+                self.reader,
+                length=self.entities_count,
+                label=self.entity_str,
+                update_min_steps=100,
+            ) as reader:
+                for row in reader:
+                    self.validate_row(row)
 
-                # Update the node identifier dictionary if necessary
-                if self.config.store_node_identifiers:
-                    id_field = row[self.id]
-                    if self.id_namespace is not None:
-                        id_field = self.id_namespace + "." + str(id_field)
-                    self.update_node_dictionary(id_field)
+                    # Update the node identifier dictionary if necessary
+                    if self.config.store_node_identifiers:
+                        id_field = row[self.id]
+                        if self.id_namespace is not None:
+                            id_field = self.id_namespace + "." + str(id_field)
+                        self.update_node_dictionary(id_field)
 
-                try:
-                    row_binary = self.pack_props(row)
-                except SchemaError as e:
-                    # TODO why is line_num off by one?
-                    raise SchemaError(
-                        "%s:%d %s"
-                        % (self.infile.name, self.reader.line_num - 1, str(e))
-                    )
-                row_binary_len = len(row_binary)
-                # If the addition of this entity will make the binary token grow too large,
-                # send the buffer now.
-                # TODO how much of this can be made uniform w/ relations and moved to Querybuffer?
-                added_size = self.binary_size + row_binary_len
-                if (
-                    added_size >= self.config.max_token_size
-                    or self.query_buffer.buffer_size + added_size
-                    >= self.config.max_buffer_size
-                ):
-                    self.query_buffer.labels.append(self.to_binary())
-                    self.query_buffer.send_buffer()
-                    self.reset_partial_binary()
-                    # Push the label onto the query buffer again, as there are more entities to process.
-                    self.query_buffer.labels.append(self.to_binary())
+                    try:
+                        row_binary = self.pack_props(row)
+                    except SchemaError as e:
+                        # TODO why is line_num off by one?
+                        raise SchemaError(
+                            "%s:%d %s"
+                            % (self.infile.name, self.reader.line_num - 1, str(e))
+                        ) from e
+                    row_binary_len = len(row_binary)
+                    # If the addition of this entity will make the binary token grow too large,
+                    # send the buffer now.
+                    # TODO how much of this can be made uniform w/ relations and moved to Querybuffer?
+                    added_size = self.binary_size + row_binary_len
+                    if (
+                        added_size >= self.config.max_token_size
+                        or self.query_buffer.buffer_size + added_size
+                        >= self.config.max_buffer_size
+                    ):
+                        self.query_buffer.labels.append(self.to_binary())
+                        self.query_buffer.send_buffer()
+                        self.reset_partial_binary()
+                        # Push the label onto the query buffer again, as there are more entities to process.
+                        self.query_buffer.labels.append(self.to_binary())
 
-                self.query_buffer.node_count += 1
-                entities_created += 1
-                self.binary_size += row_binary_len
-                self.binary_entities.append(row_binary)
-            self.query_buffer.labels.append(self.to_binary())
-        self.infile.close()
+                    self.query_buffer.node_count += 1
+                    entities_created += 1
+                    self.binary_size += row_binary_len
+                    self.binary_entities.append(row_binary)
+                self.query_buffer.labels.append(self.to_binary())
+        finally:
+            try:
+                self.infile.close()
+            except OSError as e:
+                # Closing the input file is best-effort during cleanup; do not fail processing on close errors.
+                sys.stderr.write(
+                    "Warning: failed to close file '%s': %s\n" % (self.infile.name, str(e))
+                )
+                sys.stderr.flush()
         print("%d nodes created with label '%s'" % (entities_created, self.entity_str))
