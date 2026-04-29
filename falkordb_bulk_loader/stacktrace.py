@@ -17,8 +17,11 @@ import sys
 def register_stacktrace_dump_handler(stream=None):
     """Register a SIGUSR1 handler that dumps tracebacks of all threads.
 
-    Returns ``True`` if the handler was registered, ``False`` if SIGUSR1 is
-    not available on the current platform.
+    Returns ``True`` if the handler was registered, ``False`` if registration
+    could not be completed. This includes platforms where ``SIGUSR1`` is not
+    available, as well as environments where signal registration is not
+    supported (for example, outside the main thread or other restricted
+    runtimes).
     """
     if not hasattr(signal, "SIGUSR1"):
         return False
