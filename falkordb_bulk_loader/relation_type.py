@@ -1,3 +1,4 @@
+import logging
 import re
 import struct
 
@@ -5,6 +6,8 @@ import click
 
 from .entity_file import EntityFile, Type
 from .exceptions import CSVError, SchemaError
+
+logger = logging.getLogger(__name__)
 
 
 # Handler class for processing relation csv files.
@@ -55,11 +58,10 @@ class RelationType(EntityFile):
 
     def process_entities(self):
         entities_created = 0
-        if self.config.verbose:
-            print(
-                f"Processing relation file '{self.infile.name}' "
-                f"with type '{self.entity_str}' ({self.entities_count} entities)..."
-            )
+        logger.debug(
+            f"Processing relation file '{self.infile.name}' "
+            f"with type '{self.entity_str}' ({self.entities_count} entities)..."
+        )
         with click.progressbar(
             self.reader,
             length=self.entities_count,

@@ -1,4 +1,5 @@
 import csv
+import logging
 import sys
 from timeit import default_timer as timer
 
@@ -7,6 +8,8 @@ import redis
 from falkordb import FalkorDB
 
 from .stacktrace import register_stacktrace_dump_handler
+
+logger = logging.getLogger(__name__)
 
 
 def utf8len(s):
@@ -34,7 +37,6 @@ class BulkUpdate:
         query,
         variable_name,
         client,
-        verbose=False,
     ):
         self.separator = separator
         self.no_header = no_header
@@ -45,7 +47,6 @@ class BulkUpdate:
         self.graph_name = graph_name
         self.graph = client.select_graph(graph_name)
         self.statistics = {}
-        self.verbose = verbose
         self.buffers_sent = 0
 
     def update_statistics(self, result):
@@ -68,11 +69,10 @@ class BulkUpdate:
     def emit_buffer(self, rows):
         command = " ".join([rows, self.query])
         self.buffers_sent += 1
-        if self.verbose:
-            print(
-                f"Sending buffer #{self.buffers_sent} "
-                f"({utf8len(command)} bytes) to FalkorDB..."
-            )
+        logger.debug(
+            f"Sending buffer #{self.buffers_sent} "
+            f"({utf8len(command)} bytes) to FalkorDB..."
+        )
         result = self.graph.query(command)
         self.update_statistics(result)
 
@@ -202,14 +202,18 @@ def bulk_update(
     if sys.version_info < (3, 10):
         raise RuntimeError("Python >= 3.10 is required for the falkordb bulk updater.")
 
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
     # Allow operators to dump stack traces of all threads via `kill -SIGUSR1 <pid>`.
     register_stacktrace_dump_handler()
 
     start_time = timer()
 
     # Attempt to connect to the server
-    if verbose:
-        print(f"Connecting to FalkorDB server at '{server_url}'...")
+    logger.debug(f"Connecting to FalkorDB server at '{server_url}'...")
     client = FalkorDB.from_url(server_url)
     try:
         client.connection.ping()
@@ -217,8 +221,7 @@ def bulk_update(
         print("Could not connect to server.")
         raise e
 
-    if verbose:
-        print("Connected to FalkorDB server.")
+    logger.debug("Connected to FalkorDB server.")
 
     # Attempt to verify that falkordb module is loaded
     try:
@@ -226,14 +229,12 @@ def bulk_update(
         if "graph" not in module_list:
             print("FalkorDB module not loaded on connected server.")
             sys.exit(1)
-        if verbose:
-            print("FalkorDB module is loaded on the server.")
+        logger.debug("FalkorDB module is loaded on the server.")
     except redis.exceptions.ResponseError:
         # Ignore check if the connected server does not support the "MODULE LIST" command
-        if verbose:
-            print(
-                "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
-            )
+        logger.debug(
+            "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
+        )
 
     updater = BulkUpdate(
         graph,
@@ -244,11 +245,9 @@ def bulk_update(
         query,
         variable_name,
         client,
-        verbose,
     )
 
-    if verbose:
-        print(f"Validating query against graph '{graph}'...")
+    logger.debug(f"Validating query against graph '{graph}'...")
 
     if graph in client.list_graphs():
         updater.validate_query()
@@ -259,8 +258,7 @@ def bulk_update(
         updater.validate_query()
         g.delete()
 
-    if verbose:
-        print(f"Processing CSV file '{csv}'...")
+    logger.debug(f"Processing CSV file '{csv}'...")
 
     updater.process_update_csv()
 

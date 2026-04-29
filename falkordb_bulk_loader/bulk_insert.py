@@ -1,3 +1,4 @@
+import logging
 import sys
 from timeit import default_timer as timer
 
@@ -10,6 +11,8 @@ from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
 from .stacktrace import register_stacktrace_dump_handler
+
+logger = logging.getLogger(__name__)
 
 
 def parse_schemas(cls, query_buf, path_to_csv, csv_tuples, config):
@@ -172,6 +175,11 @@ def bulk_insert(
     if sys.version_info < (3, 10):
         raise RuntimeError("Python >= 3.10 is required for the falkordb bulk loader.")
 
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
     # Allow operators to dump stack traces of all threads via `kill -SIGUSR1 <pid>`.
     register_stacktrace_dump_handler()
 
@@ -196,11 +204,9 @@ def bulk_insert(
         int(quote),
         store_node_identifiers,
         escapechar,
-        verbose,
     )
 
-    if verbose:
-        print(f"Connecting to FalkorDB server at '{server_url}'...")
+    logger.debug(f"Connecting to FalkorDB server at '{server_url}'...")
 
     client = FalkorDB.from_url(server_url)
 
@@ -211,8 +217,7 @@ def bulk_insert(
         print("Could not connect to FalkorDB server.")
         raise e
 
-    if verbose:
-        print("Connected to FalkorDB server.")
+    logger.debug("Connected to FalkorDB server.")
 
     # Attempt to verify that falkordb module is loaded
     try:
@@ -220,14 +225,12 @@ def bulk_insert(
         if "graph" not in module_list:
             print("falkordb module not loaded on connected server.")
             sys.exit(1)
-        if verbose:
-            print("FalkorDB module is loaded on the server.")
+        logger.debug("FalkorDB module is loaded on the server.")
     except redis.exceptions.ResponseError:
         # Ignore check if the connected server does not support the "MODULE LIST" command
-        if verbose:
-            print(
-                "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
-            )
+        logger.debug(
+            "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
+        )
 
     # Verify that the graph name is not already used in the Redis database
     key_exists = client.connection.exists(graph)
@@ -237,34 +240,27 @@ def bulk_insert(
         )
         sys.exit(1)
 
-    if verbose:
-        print(f"Graph name '{graph}' is available.")
+    logger.debug(f"Graph name '{graph}' is available.")
 
     query_buf = QueryBuffer(graph, client, config)
 
     # Read the header rows of each input CSV and save its schema.
-    if verbose:
-        print("Parsing node CSV schemas...")
+    logger.debug("Parsing node CSV schemas...")
     labels = parse_schemas(Label, query_buf, nodes, nodes_with_label, config)
-    if verbose:
-        print(f"Parsed {len(labels)} node CSV file(s).")
-        print("Parsing relation CSV schemas...")
+    logger.debug(f"Parsed {len(labels)} node CSV file(s).")
+    logger.debug("Parsing relation CSV schemas...")
     reltypes = parse_schemas(
         RelationType, query_buf, relations, relations_with_type, config
     )
-    if verbose:
-        print(f"Parsed {len(reltypes)} relation CSV file(s).")
+    logger.debug(f"Parsed {len(reltypes)} relation CSV file(s).")
 
-    if verbose:
-        print("Processing nodes...")
+    logger.debug("Processing nodes...")
     process_entities(labels)
-    if verbose:
-        print("Processing relations...")
+    logger.debug("Processing relations...")
     process_entities(reltypes)
 
     # Send all remaining tokens to Redis
-    if verbose:
-        print("Flushing remaining buffered data to FalkorDB...")
+    logger.debug("Flushing remaining buffered data to FalkorDB...")
     query_buf.send_buffer()
     query_buf.wait_pool()
 
