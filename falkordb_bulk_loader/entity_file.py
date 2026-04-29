@@ -172,7 +172,9 @@ def inferred_prop_to_binary(prop_val):
     if prop_val[0] == "[" and prop_val[-1] == "]":
         try:
             return array_prop_to_binary(format_str, prop_val)
-        except Exception:
+        except SchemaError:
+            # Schemaless mode: if the value looks like an array but can't be
+            # parsed, fall through and treat it as a plain string.
             pass
 
     # If we've reached this point, the property is a string.
