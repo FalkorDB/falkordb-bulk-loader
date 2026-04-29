@@ -1,4 +1,5 @@
 import os
+import selectors
 import signal
 import subprocess
 import sys
@@ -56,8 +57,28 @@ def test_sigusr1_dumps_stacktrace(tmp_path):
         text=True,
     )
     try:
-        # Wait for the child to register the handler.
-        ready_line = proc.stdout.readline()
+        # Wait for the child to register the handler, with a bounded timeout
+        # so the test fails fast if the child never reaches readiness (e.g.
+        # an import error or unexpected hang during startup).
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ)
+        deadline = time.monotonic() + 10.0
+        ready_line = ""
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError(
+                    "Timed out waiting for child process readiness signal"
+                )
+            if proc.poll() is not None:
+                # Child exited before signalling readiness; surface its output.
+                _, stderr = proc.communicate()
+                raise AssertionError(
+                    f"Child exited prematurely (rc={proc.returncode}): {stderr}"
+                )
+            if sel.select(timeout=min(remaining, 0.5)):
+                ready_line = proc.stdout.readline()
+                break
         assert "ready" in ready_line
 
         proc.send_signal(signal.SIGUSR1)
