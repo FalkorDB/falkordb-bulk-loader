@@ -1,3 +1,5 @@
+import csv
+
 from .exceptions import SchemaError
 
 
@@ -12,7 +14,7 @@ class Config:
         skip_invalid_nodes=False,
         skip_invalid_edges=False,
         separator=",",
-        quoting=3,
+        quoting=csv.QUOTE_MINIMAL,
         store_node_identifiers=False,
         escapechar="\\",
     ):
