@@ -20,7 +20,10 @@ class TestBulkUpdate:
     @classmethod
     def teardown_class(cls):
         """Delete temporary files"""
-        os.unlink("/tmp/csv.tmp")
+        try:
+            os.unlink("/tmp/csv.tmp")
+        except FileNotFoundError:
+            pass
         cls.db_con.flushdb()
 
     def test_simple_updates(self):
@@ -402,3 +405,25 @@ class TestBulkUpdate:
 
         assert res.exit_code != 0
         assert "No such file" in str(res.exception)
+
+    def test_missing_query_gives_usage_error(self):
+        """Validate that omitting --query emits a clear usage error (exit 2)."""
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            ["--csv", "some_file.csv", "some_graph"],
+        )
+        assert res.exit_code == 2
+        assert "Missing option" in res.output
+        assert "--query" in res.output
+
+    def test_missing_csv_gives_usage_error(self):
+        """Validate that omitting --csv emits a clear usage error (exit 2)."""
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            ["--query", "CREATE (n)", "some_graph"],
+        )
+        assert res.exit_code == 2
+        assert "Missing option" in res.output
+        assert "--csv" in res.output
