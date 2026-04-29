@@ -6,6 +6,7 @@ import redis
 from falkordb import FalkorDB
 
 from .config import Config
+from .exceptions import CSVError
 from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
@@ -223,8 +224,11 @@ def bulk_insert(
         RelationType, query_buf, relations, relations_with_type, config
     )
 
-    process_entities(labels)
-    process_entities(reltypes)
+    try:
+        process_entities(labels)
+        process_entities(reltypes)
+    except CSVError as e:
+        sys.exit(str(e))
 
     # Send all remaining tokens to Redis
     query_buf.send_buffer()
