@@ -9,6 +9,7 @@ from .config import Config
 from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
+from .stacktrace import register_stacktrace_dump_handler
 
 
 def parse_schemas(cls, query_buf, path_to_csv, csv_tuples, config):
@@ -163,6 +164,9 @@ def bulk_insert(
 ):
     if sys.version_info < (3, 10):
         raise RuntimeError("Python >= 3.10 is required for the falkordb bulk loader.")
+
+    # Allow operators to dump stack traces of all threads via `kill -SIGUSR1 <pid>`.
+    register_stacktrace_dump_handler()
 
     if not (any(nodes) or any(nodes_with_label)):
         raise Exception("At least one node file must be specified.")
