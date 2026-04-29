@@ -226,3 +226,61 @@ falkordb-bulk-update SocialGraph --csv FOLLOWS.csv --query "MATCH (start {id: ro
 ```
 
 When using the bulk updater, it is essential to sanitize CSV inputs beforehand, as falkordb *will* commit changes to the graph incrementally. As such, malformed inputs may leave the graph in a partially-updated state.
+
+## Loading Matrix Market files
+
+Pip installation also exposes the command `falkordb-mtx-insert` for loading sparse graphs from [Matrix Market](https://math.nist.gov/MatrixMarket/formats.html) (`.mtx`) files:
+
+```sh
+falkordb-mtx-insert GRAPHNAME MTX_FILE [OPTIONS]
+```
+
+Installation by cloning the repository allows the MTX loader to be invoked via Python like so:
+
+```sh
+python3 falkordb_bulk_loader/mtx_insert.py GRAPHNAME MTX_FILE [OPTIONS]
+```
+
+| Flags | Extended flags           | Parameter                                                                     |
+|:-----:|--------------------------|-------------------------------------------------------------------------------|
+|  -u   | --server-url TEXT        | Server URL (default: redis://127.0.0.1:6379)                                  |
+|  -l   | --node-label TEXT        | Label assigned to all nodes (default: `Node`)                                 |
+|  -t   | --relation-type TEXT     | Relation type assigned to all edges (default: `CONNECTS`)                     |
+|  -a   | --attr-name TEXT         | Property name used to store edge values (optional; values discarded if omitted) |
+
+The MTX loader creates a graph from a sparse matrix in coordinate (`coordinate`) format. Each matrix index becomes a node with an `id` property (1-based), and each non-zero entry becomes a directed edge between the corresponding nodes.
+
+### Example
+
+```sh
+falkordb-mtx-insert MyGraph example/p2p-Gnutella04.mtx
+```
+
+This loads the Gnutella peer-to-peer network (10,879 nodes, 39,994 edges) into a graph called `MyGraph`.
+
+To store edge weights from a valued matrix:
+
+```sh
+falkordb-mtx-insert WeightedGraph mymatrix.mtx --attr-name weight
+```
+
+### Supported matrix types
+
+| Feature        | Supported values                        |
+|----------------|-----------------------------------------|
+| Format         | `coordinate` (sparse) only              |
+| Field          | `real`, `integer`, `complex`, `pattern` |
+| Symmetry       | `general`, `symmetric`                  |
+
+`complex` values are stored as strings in the form `"1.5+2.3i"`.
+
+For `symmetric` matrices, each off-diagonal stored entry produces two directed edges (one in each direction). Diagonal entries produce a single self-loop.
+
+Gzipped files (`.mtx.gz`) are supported transparently.
+
+### Constraints
+
+- The graph name must not already exist in the database.
+- Only square matrices are supported.
+- `--node-label`, `--relation-type`, and `--attr-name` must be valid Cypher identifiers (letters, digits, and underscores; must start with a letter or underscore).
+- `skew-symmetric` and `hermitian` symmetry types and `array`-format matrices are not supported.
