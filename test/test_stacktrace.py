@@ -16,7 +16,11 @@ pytestmark = pytest.mark.skipif(
 def test_register_returns_true_on_unix():
     from falkordb_bulk_loader.stacktrace import register_stacktrace_dump_handler
 
-    assert register_stacktrace_dump_handler() is True
+    previous_handler = signal.getsignal(signal.SIGUSR1)
+    try:
+        assert register_stacktrace_dump_handler() is True
+    finally:
+        signal.signal(signal.SIGUSR1, previous_handler)
 
 
 def test_sigusr1_dumps_stacktrace(tmp_path):
