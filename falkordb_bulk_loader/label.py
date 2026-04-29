@@ -104,6 +104,11 @@ class Label(EntityFile):
                     or self.query_buffer.buffer_size + added_size
                     >= self.config.max_buffer_size
                 ):
+                    logger.debug(
+                        "Buffer size threshold reached while processing '%s' "
+                        "(label '%s'); flushing partial buffer."
+                        % (self.infile.name, self.entity_str)
+                    )
                     self.query_buffer.labels.append(self.to_binary())
                     self.query_buffer.send_buffer()
                     self.reset_partial_binary()

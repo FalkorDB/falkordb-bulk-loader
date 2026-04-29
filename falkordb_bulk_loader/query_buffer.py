@@ -46,6 +46,9 @@ class QueryBuffer:
         self.pool = Pool(nodes=1)
         self.tasks = []
 
+        # Index of the next buffer to be sent (incremented after each send)
+        self.buffer_index = 0
+
     def send_buffer(self):
         """Send all pending inserts to Redis"""
         # Do nothing if we have no entities
@@ -61,6 +64,20 @@ class QueryBuffer:
         if self.initial_query:
             args.insert(0, "BEGIN")
             self.initial_query = False
+
+        logger.debug(
+            "Sending buffer #%d to graph '%s': %d nodes, %d relations, %d labels, %d relation types, %d bytes"
+            % (
+                self.buffer_index,
+                self.graphname,
+                self.node_count,
+                self.relation_count,
+                len(self.labels),
+                len(self.reltypes),
+                self.buffer_size,
+            )
+        )
+        self.buffer_index += 1
 
         task = self.pool.apipe(run, self.client, self.graphname, args)
         self.add_task(task)
