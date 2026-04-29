@@ -7,6 +7,7 @@ import redis
 from falkordb import FalkorDB
 
 from .config import Config
+from .exceptions import CSVError
 from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
@@ -256,10 +257,13 @@ def bulk_insert(
     )
     logger.debug(f"Parsed {len(reltypes)} relation CSV file(s).")
 
-    logger.debug("Processing nodes...")
-    process_entities(labels)
-    logger.debug("Processing relations...")
-    process_entities(reltypes)
+    try:
+        logger.debug("Processing nodes...")
+        process_entities(labels)
+        logger.debug("Processing relations...")
+        process_entities(reltypes)
+    except CSVError as e:
+        sys.exit(str(e))
 
     # Send all remaining tokens to Redis
     logger.debug("Flushing remaining buffered data to FalkorDB...")

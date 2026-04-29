@@ -5,7 +5,7 @@ import sys
 import click
 
 from .entity_file import EntityFile, Type
-from .exceptions import SchemaError
+from .exceptions import CSVError, SchemaError
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,10 @@ class Label(EntityFile):
             )
             sys.stderr.flush()
             if self.config.skip_invalid_nodes is False:
-                sys.exit(1)
+                raise CSVError(
+                    "Duplicate node identifier '%s' at %s:%d"
+                    % (identifier, self.infile.name, self.reader.line_num)
+                )
         self.query_buffer.nodes[identifier] = self.query_buffer.top_node_id
         self.query_buffer.top_node_id += 1
 
