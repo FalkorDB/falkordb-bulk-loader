@@ -2,7 +2,6 @@
 
 import csv
 import tempfile
-import os
 
 import pytest
 
