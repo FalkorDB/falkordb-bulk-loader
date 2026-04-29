@@ -63,6 +63,11 @@ class Label(EntityFile):
 
     def process_entities(self):
         entities_created = 0
+        if self.config.verbose:
+            print(
+                f"Processing node file '{self.infile.name}' "
+                f"with label '{self.entity_str}' ({self.entities_count} entities)..."
+            )
         with click.progressbar(
             self.reader,
             length=self.entities_count,

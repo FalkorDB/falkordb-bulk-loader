@@ -17,6 +17,12 @@ class TestBulkLoader:
         assert not config.store_node_identifiers
         assert config.separator == ","
         assert config.quoting == 3
+        assert not config.verbose
+
+    def test_verbose_flag(self):
+        """Verify that the verbose flag is propagated through Config."""
+        config = Config(verbose=True)
+        assert config.verbose is True
 
     def test_modified_values(self):
         """Verify that Config_set updates Config class values accordingly."""

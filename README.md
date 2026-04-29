@@ -62,6 +62,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 |  -c   | --max-token-size INT       | (Debug argument) Max size (MBs) of each token sent to the server (default 64) |
 |  -i   | --index Label:Property     | After bulk import, create an Index on provided Label:Property pair (optional) |
 |  -f   | --full-text-index Label:Property | After bulk import, create a full-text index on provided Label:Property pair (optional) |
+|       | --verbose                  | Print extra information about the steps performed during loading       |
 
 The only required arguments are the name to give the newly-created graph (which can appear anywhere) and at least one node CSV file.
 The nodes and relationship flags should be specified once per input file.
@@ -215,6 +216,7 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 |  -o   | --separator TEXT         | Field token separator in CSV file                          |
 |  -n   | --no-header              | If set, the CSV file has no header                         |
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
+|       | --verbose                | Print extra information about the steps performed during the update |
 
 The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query.
 

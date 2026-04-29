@@ -15,6 +15,7 @@ class Config:
         quoting=3,
         store_node_identifiers=False,
         escapechar="\\",
+        verbose=False,
     ):
         """Settings for this run of the bulk loader"""
         # Maximum number of tokens per query
@@ -45,3 +46,6 @@ class Config:
 
         # True if we are building relations as well as nodes
         self.store_node_identifiers = store_node_identifiers
+
+        # Print verbose progress messages
+        self.verbose = verbose

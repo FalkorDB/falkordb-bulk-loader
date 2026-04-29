@@ -32,6 +32,7 @@ class BulkUpdate:
         query,
         variable_name,
         client,
+        verbose=False,
     ):
         self.separator = separator
         self.no_header = no_header
@@ -42,6 +43,8 @@ class BulkUpdate:
         self.graph_name = graph_name
         self.graph = client.select_graph(graph_name)
         self.statistics = {}
+        self.verbose = verbose
+        self.buffers_sent = 0
 
     def update_statistics(self, result):
         self.update_statistic("Nodes created", result.nodes_created)
@@ -62,7 +65,13 @@ class BulkUpdate:
 
     def emit_buffer(self, rows):
         command = " ".join([rows, self.query])
+        if self.verbose:
+            print(
+                f"Sending buffer #{self.buffers_sent + 1} "
+                f"({utf8len(command)} bytes) to FalkorDB..."
+            )
         result = self.graph.query(command)
+        self.buffers_sent += 1
         self.update_statistics(result)
 
     def quote_string(self, cell):
@@ -171,6 +180,12 @@ class BulkUpdate:
     default=500,
     help="Max size of each token in megabytes (default 500, max 512)",
 )
+@click.option(
+    "--verbose",
+    default=False,
+    is_flag=True,
+    help="Print extra information about the steps performed during the update",
+)
 def bulk_update(
     graph,
     server_url,
@@ -180,6 +195,7 @@ def bulk_update(
     separator,
     no_header,
     max_token_size,
+    verbose,
 ):
     if sys.version_info < (3, 10):
         raise RuntimeError("Python >= 3.10 is required for the falkordb bulk updater.")
@@ -187,6 +203,8 @@ def bulk_update(
     start_time = timer()
 
     # Attempt to connect to the server
+    if verbose:
+        print(f"Connecting to FalkorDB server at '{server_url}'...")
     client = FalkorDB.from_url(server_url)
     try:
         client.connection.ping()
@@ -194,19 +212,38 @@ def bulk_update(
         print("Could not connect to server.")
         raise e
 
+    if verbose:
+        print("Connected to FalkorDB server.")
+
     # Attempt to verify that falkordb module is loaded
     try:
         module_list = [m["name"] for m in client.connection.module_list()]
         if "graph" not in module_list:
             print("FalkorDB module not loaded on connected server.")
             sys.exit(1)
+        if verbose:
+            print("FalkorDB module is loaded on the server.")
     except redis.exceptions.ResponseError:
         # Ignore check if the connected server does not support the "MODULE LIST" command
-        pass
+        if verbose:
+            print(
+                "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
+            )
 
     updater = BulkUpdate(
-        graph, max_token_size, separator, no_header, csv, query, variable_name, client
+        graph,
+        max_token_size,
+        separator,
+        no_header,
+        csv,
+        query,
+        variable_name,
+        client,
+        verbose,
     )
+
+    if verbose:
+        print(f"Validating query against graph '{graph}'...")
 
     if graph in client.list_graphs():
         updater.validate_query()
@@ -216,6 +253,9 @@ def bulk_update(
         g.query("RETURN 1")
         updater.validate_query()
         g.delete()
+
+    if verbose:
+        print(f"Processing CSV file '{csv}'...")
 
     updater.process_update_csv()
 
