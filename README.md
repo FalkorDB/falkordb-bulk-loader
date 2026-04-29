@@ -228,3 +228,14 @@ falkordb-bulk-update SocialGraph --csv FOLLOWS.csv --query "MATCH (start {id: ro
 ```
 
 When using the bulk updater, it is essential to sanitize CSV inputs beforehand, as falkordb *will* commit changes to the graph incrementally. As such, malformed inputs may leave the graph in a partially-updated state.
+
+## Diagnostics: dumping a stack trace on demand
+
+Both `falkordb-bulk-insert` and `falkordb-bulk-update` install a `SIGUSR1` handler at start up. Sending `SIGUSR1` to a running loader process will write the tracebacks of all Python threads to `stderr`, which is useful for diagnosing hangs or unexpectedly slow loads without attaching a debugger:
+
+```sh
+kill -SIGUSR1 <pid>
+```
+
+This feature relies on Python's `faulthandler` module and is only available on platforms that support `SIGUSR1` (i.e. not Windows). On unsupported platforms registration is silently skipped and the loaders behave as before.
+
