@@ -112,6 +112,10 @@ class Label(EntityFile):
         finally:
             try:
                 self.infile.close()
-            except OSError:
-                pass
+            except OSError as e:
+                # Closing the input file is best-effort during cleanup; do not fail processing on close errors.
+                sys.stderr.write(
+                    "Warning: failed to close file '%s': %s\n" % (self.infile.name, str(e))
+                )
+                sys.stderr.flush()
         print("%d nodes created with label '%s'" % (entities_created, self.entity_str))
