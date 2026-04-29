@@ -1,6 +1,6 @@
 [project]
 name = "falkordb-bulk-loader"
-version = "1.1.0"
+version = "1.2.0"
 description = "falkordb Bulk Import Tool"
 authors = [{ name = "FalkorDB Inc", email = "info@falkordb.com" }]
 license = "BSD-3-Clause"
