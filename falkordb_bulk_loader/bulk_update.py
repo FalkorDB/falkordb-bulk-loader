@@ -6,6 +6,8 @@ import click
 import redis
 from falkordb import FalkorDB
 
+from .stacktrace import register_stacktrace_dump_handler
+
 
 def utf8len(s):
     return len(s.encode("utf-8"))
@@ -183,6 +185,9 @@ def bulk_update(
 ):
     if sys.version_info < (3, 10):
         raise RuntimeError("Python >= 3.10 is required for the falkordb bulk updater.")
+
+    # Allow operators to dump stack traces of all threads via `kill -SIGUSR1 <pid>`.
+    register_stacktrace_dump_handler()
 
     start_time = timer()
 
