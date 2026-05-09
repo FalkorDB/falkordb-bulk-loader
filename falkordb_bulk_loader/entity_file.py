@@ -189,7 +189,9 @@ class EntityFile(object):
         else:
             self.entity_str = os.path.splitext(os.path.basename(filename))[0]
         # Input file handling
-        self.infile = io.open(filename, "rt")
+        # Use utf-8-sig so a leading BOM (common in Excel exports) is stripped
+        # transparently; falls back to standard UTF-8 otherwise.
+        self.infile = io.open(filename, "rt", encoding="utf-8-sig")
 
         # Initialize CSV reader that ignores leading whitespace in each field
         # and does not modify input quote characters
