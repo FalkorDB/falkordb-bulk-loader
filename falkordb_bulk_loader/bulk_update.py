@@ -101,6 +101,9 @@ class BulkUpdate:
 
     def process_update_csv(self):
         entity_count = count_entities(self.filename)
+        if self.no_header is False:
+            # The header row is counted but not processed as data.
+            entity_count = max(entity_count - 1, 0)
 
         with open(self.filename, "rt") as f:
             if self.no_header is False:
