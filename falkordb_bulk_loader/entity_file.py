@@ -207,14 +207,23 @@ class EntityFile(object):
 
         self.convert_header()  # Extract data from header row.
         self.count_entities()  # Count number of entities/row in file.
-        next(self.reader)  # Skip the header row.
 
     # Count number of rows in file.
     def count_entities(self):
-        self.entities_count = 0
-        self.entities_count = sum(1 for line in self.infile)
-        # seek back
-        self.infile.seek(0)
+        # Open a separate file handle so self.reader's position and line_num
+        # are not disturbed.  Using csv.reader (rather than raw line iteration)
+        # ensures that fields containing embedded newlines (RFC 4180) are
+        # counted as a single row.
+        with io.open(self.infile.name, "rt") as counting_file:
+            counting_reader = csv.reader(
+                counting_file,
+                delimiter=self.config.separator,
+                skipinitialspace=True,
+                quoting=self.config.quoting,
+                escapechar=self.config.escapechar,
+            )
+            next(counting_reader)  # skip header row
+            self.entities_count = sum(1 for _ in counting_reader)
         return self.entities_count
 
     # Simple input validations for each row of a CSV file
