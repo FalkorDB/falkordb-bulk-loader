@@ -227,7 +227,14 @@ def bulk_update(
 
     # Attempt to verify that falkordb module is loaded
     try:
-        module_list = [m["name"] for m in client.connection.module_list()]
+        # The "name" key may come back as bytes or str depending on the
+        # client's decode_responses setting; normalise to str for the check.
+        module_list = []
+        for m in client.connection.module_list():
+            name = m.get(b"name", m.get("name"))
+            if isinstance(name, bytes):
+                name = name.decode("utf-8")
+            module_list.append(name)
         if "graph" not in module_list:
             logger.error("FalkorDB module not loaded on connected server.")
             sys.exit(1)
