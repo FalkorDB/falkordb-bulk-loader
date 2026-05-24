@@ -229,6 +229,13 @@ falkordb-bulk-update SocialGraph --csv FOLLOWS.csv --query "MATCH (start {id: ro
 
 When using the bulk updater, it is essential to sanitize CSV inputs beforehand, as falkordb *will* commit changes to the graph incrementally. As such, malformed inputs may leave the graph in a partially-updated state.
 
+Row values are passed to the server as Cypher parameters, so special characters such as quotation marks, backslashes, and brackets are handled safely without any manual escaping. Each CSV cell is converted to the most appropriate Python type before being sent:
+
+- **Integer / float**: numeric strings are inferred automatically.
+- **Boolean**: the strings `true` and `false` (case-insensitive) become booleans.
+- **Array**: cells that start with `[` and end with `]` are parsed as list literals, which FalkorDB stores as array properties.  Both Python syntax (`[1, 'nested_str', True, None]`) and Cypher syntax (`[1, 'nested_str', true, null]` — lowercase `true` / `false` / `null`) are accepted.  Cells that look like brackets but are not valid list literals (e.g. `[not an array]`) are kept as strings.
+- **String**: all other values are passed as plain strings.  Empty cells are passed as the empty string `""`, so existing Cypher guards like `CASE WHEN row[i] <> '' THEN …` continue to work as expected.
+
 ## Diagnostics: dumping a stack trace on demand
 
 Both `falkordb-bulk-insert` and `falkordb-bulk-update` install a `SIGUSR1` handler at start up. Sending `SIGUSR1` to a running loader process will write the tracebacks of all Python threads to `stderr`, which is useful for diagnosing hangs or unexpectedly slow loads without attaching a debugger:
