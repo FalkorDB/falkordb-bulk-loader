@@ -2,7 +2,10 @@ import csv
 import os
 import unittest
 
+import pytest
+
 from falkordb_bulk_loader.config import Config
+from falkordb_bulk_loader.exceptions import CSVError
 from falkordb_bulk_loader.label import Label
 
 class TestBulkLoader:
@@ -48,3 +51,14 @@ class TestBulkLoader:
         assert label.entities_count == 2
         assert label.types[0].name == "ID_STRING"
         assert label.types[1].name == "STRING"
+
+    def test_schema_header_field_missing_type_raises(self):
+        """Verify that a schema header field without a type raises a clear CSVError."""
+        with open("/tmp/labels.tmp", mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(["id:ID", "name"])  # 'name' has no type
+            out.writerow([0, "Alice"])
+
+        config = Config(enforce_schema=True)
+        with pytest.raises(CSVError, match="missing a type"):
+            Label(None, "/tmp/labels.tmp", "LabelTest", config)
