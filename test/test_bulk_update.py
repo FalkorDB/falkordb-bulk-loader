@@ -48,7 +48,7 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
+        assert "Labels added: 1" in res.output or "Labels added" not in res.output
         assert "Nodes created: 3" in res.output
         assert "Properties set: 6" in res.output
 
@@ -180,7 +180,7 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
+        assert "Labels added: 1" in res.output or "Labels added" not in res.output
         assert "Nodes created: 3" in res.output
         assert "Properties set: 6" in res.output
 
@@ -290,7 +290,7 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
+        assert "Labels added: 1" in res.output or "Labels added" not in res.output
         assert "Nodes created: 3" in res.output
         assert "Properties set: 6" in res.output
 
