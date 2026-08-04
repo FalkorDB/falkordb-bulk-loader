@@ -66,6 +66,7 @@ python3 falkordb_bulk_loader/bulk_insert.py GRAPHNAME [OPTIONS]
 
 The only required arguments are the name to give the newly-created graph (which can appear anywhere) and at least one node CSV file.
 The nodes and relationship flags should be specified once per input file.
+When both are provided, all node files are loaded before any relationship files.
 
 ```sh
 falkordb-bulk-insert GRAPH_DEMO -n example/Person.csv -n example/Country.csv -r example/KNOWS.csv -r example/VISITED.csv
@@ -213,20 +214,46 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 |       | --socket-timeout FLOAT   | Socket read/write timeout in seconds                        |
 |       | --socket-connect-timeout FLOAT | Socket connection timeout in seconds                 |
 |  -q   | --query TEXT             | Query to run on server                                     |
+|       | --query-file TEXT        | CSV with per-file query mappings: `input_file,query`      |
 |  -v   | --variable-name TEXT     | Variable name for row array in queries (default: row)      |
 |  -c   | --csv TEXT               | Path to CSV input file                                     |
+|       | --nodes TEXT             | Node input file. Can be specified multiple times.          |
+|       | --relations TEXT         | Relation input file. Can be specified multiple times.      |
 |  -o   | --separator TEXT         | Field token separator in CSV file                          |
 |  -n   | --no-header              | If set, the CSV file has no header                         |
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
 |       | --verbose                | Print extra information about the steps performed during the update |
 
-The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query. Use `--socket-timeout` and `--socket-connect-timeout` to tune client socket deadlines for long-running updates.
+The bulk updater supports:
+- Single-file mode: `--csv` + `--query`.
+- Multi-file mode: `--nodes` / `--relations` + `--query-file`.
+- Timeout tuning: `--socket-timeout` and `--socket-connect-timeout`.
+
+In multi-file mode, all `--nodes` inputs are processed first, followed by all `--relations` inputs.
+
+The bulk updater reads input file(s) in batches and commits changes according to each provided query.
 
 For example, given the CSV files described in [Input Schema CSV examples](#input-schema-csv-examples), the bulk loader could create the same nodes and relationships with the commands:
 
 ```sh
 falkordb-bulk-update SocialGraph --csv User.csv --query "MERGE (:User {id: row[0], name: row[1], rank: row[2]})"
 falkordb-bulk-update SocialGraph --csv FOLLOWS.csv --query "MATCH (start {id: row[0]}), (end {id: row[1]}) MERGE (start)-[f:FOLLOWS]->(end) SET f.reaction_count = row[2]"
+```
+
+Or as a single multi-file update run:
+
+`queries.csv`:
+
+```csv
+User.csv,"MERGE (:User {id: row[0], name: row[1], rank: row[2]})"
+FOLLOWS.csv,"MATCH (start {id: row[0]}), (end {id: row[1]}) MERGE (start)-[f:FOLLOWS]->(end) SET f.reaction_count = row[2]"
+```
+
+```sh
+falkordb-bulk-update SocialGraph \
+  --nodes User.csv \
+  --relations FOLLOWS.csv \
+  --query-file queries.csv
 ```
 
 When using the bulk updater, it is essential to sanitize CSV inputs beforehand, as falkordb *will* commit changes to the graph incrementally. As such, malformed inputs may leave the graph in a partially-updated state.
