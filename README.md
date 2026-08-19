@@ -209,7 +209,9 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 
 | Flags | Extended flags           | Parameter                                                  |
 |:-----:|--------------------------|------------------------------------------------------------|
-|  -u   | --server-url TEXT        | Server URL (default: falkor://127.0.0.1:6379)              |
+|  -u   | --server-url TEXT        | FalkorDB connection URL (default: falkor://127.0.0.1:6379) |
+|       | --socket-timeout FLOAT   | Socket read/write timeout in seconds                        |
+|       | --socket-connect-timeout FLOAT | Socket connection timeout in seconds                 |
 |  -q   | --query TEXT             | Query to run on server                                     |
 |  -v   | --variable-name TEXT     | Variable name for row array in queries (default: row)      |
 |  -c   | --csv TEXT               | Path to CSV input file                                     |
@@ -218,7 +220,7 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
 |       | --verbose                | Print extra information about the steps performed during the update |
 
-The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query.
+The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query. Use `--socket-timeout` and `--socket-connect-timeout` to tune client socket deadlines for long-running updates.
 
 For example, given the CSV files described in [Input Schema CSV examples](#input-schema-csv-examples), the bulk loader could create the same nodes and relationships with the commands:
 
