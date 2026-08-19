@@ -383,6 +383,115 @@ class TestBulkUpdate:
         assert res.exit_code != 0
         assert "'undefined_identifier' not defined" in str(res.exception)
 
+    def test_query_file_multi_csv_nodes_then_relations(self):
+        """Validate per-file query mappings and node-first processing in multi-file mode."""
+        graphname = "query_file_multi_csv"
+        users_file = "/tmp/users_update.tmp"
+        devices_file = "/tmp/devices_update.tmp"
+        owns_file = "/tmp/owns_update.tmp"
+        query_file = "/tmp/query_map.tmp"
+
+        with open(users_file, mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(["id", "name"])
+            out.writerow([0, "u0"])
+            out.writerow([1, "u1"])
+
+        with open(devices_file, mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(["id", "model"])
+            out.writerow([10, "d10"])
+            out.writerow([11, "d11"])
+
+        with open(owns_file, mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(["user_id", "device_id"])
+            out.writerow([0, 10])
+            out.writerow([1, 11])
+
+        with open(query_file, mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(
+                [
+                    "users_update.tmp",
+                    "MERGE (:User {id: toInteger(row[0]), name: row[1]})",
+                ]
+            )
+            out.writerow(
+                [
+                    "devices_update.tmp",
+                    "MERGE (:Device {id: toInteger(row[0]), model: row[1]})",
+                ]
+            )
+            out.writerow(
+                [
+                    "owns_update.tmp",
+                    "MATCH (u:User {id: toInteger(row[0])}), "
+                    "(d:Device {id: toInteger(row[1])}) "
+                    "MERGE (u)-[:OWNS]->(d)",
+                ]
+            )
+
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            [
+                "--nodes",
+                users_file,
+                "--nodes",
+                devices_file,
+                "--relations",
+                owns_file,
+                "--query-file",
+                query_file,
+                graphname,
+            ],
+            catch_exceptions=False,
+        )
+
+        assert res.exit_code == 0
+        assert "Nodes created: 4" in res.output
+        assert "Relationships created: 2" in res.output
+
+        tmp_graph = self.db_con.select_graph(graphname)
+        query_result = tmp_graph.query(
+            "MATCH (u:User)-[:OWNS]->(d:Device) RETURN u.id, d.id ORDER BY u.id"
+        )
+        expected_result = [[0, 10], [1, 11]]
+        assert query_result.result_set == expected_result
+
+    def test_query_file_missing_mapping(self):
+        """Validate that each declared input file requires a query mapping."""
+        graphname = "missing_query_mapping"
+        nodes_file = "/tmp/nodes_missing_query.tmp"
+        query_file = "/tmp/missing_query_map.tmp"
+
+        with open(nodes_file, mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(["id", "name"])
+            out.writerow([0, "u0"])
+
+        with open(query_file, mode="w") as csv_file:
+            out = csv.writer(csv_file)
+            out.writerow(
+                ["some_other_file.csv", "MERGE (:User {id: toInteger(row[0])})"]
+            )
+
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            [
+                "--nodes",
+                nodes_file,
+                "--query-file",
+                query_file,
+                graphname,
+            ],
+        )
+
+        assert res.exit_code != 0
+        assert "No query mapping found for input file" in res.output
+
     def test_invalid_inputs(self):
         """Validate that the bulk updater handles invalid inputs incorrectly."""
         graphname = "tmpgraph6"
@@ -411,15 +520,9 @@ class TestBulkUpdate:
         fake_client.connection.module_list.return_value = [{"name": "graph"}]
         fake_client.list_graphs.return_value = [graphname]
 
-        # Provide a dummy updater so bulk_update can finish without a real CSV.
-        fake_updater = MagicMock()
-        fake_updater.statistics = {}
-
         runner = CliRunner()
         with (
-            patch(
-                "falkordb_bulk_loader.bulk_update.BulkUpdate", return_value=fake_updater
-            ),
+            patch("falkordb_bulk_loader.bulk_update.collect_jobs", return_value=[]),
             patch(
                 "falkordb_bulk_loader.bulk_update.FalkorDB.from_url",
                 return_value=fake_client,
@@ -428,10 +531,6 @@ class TestBulkUpdate:
             res = runner.invoke(
                 bulk_update,
                 [
-                    "--csv",
-                    "/tmp/csv.tmp",
-                    "--query",
-                    "CREATE (:L {id: row[0]})",
                     "--socket-timeout",
                     "300",
                     "--socket-connect-timeout",
@@ -477,13 +576,7 @@ class TestBulkUpdate:
         ):
             res = runner.invoke(
                 bulk_update,
-                [
-                    "--csv",
-                    "/tmp/csv.tmp",
-                    "--query",
-                    "CREATE (:L {id: row[0]})",
-                    graphname,
-                ],
+                [graphname],
             )
 
         assert res.exit_code != 0
@@ -499,14 +592,9 @@ class TestBulkUpdate:
         )
         fake_client.list_graphs.return_value = [graphname]
 
-        fake_updater = MagicMock()
-        fake_updater.statistics = {}
-
         runner = CliRunner()
         with (
-            patch(
-                "falkordb_bulk_loader.bulk_update.BulkUpdate", return_value=fake_updater
-            ),
+            patch("falkordb_bulk_loader.bulk_update.collect_jobs", return_value=[]),
             patch(
                 "falkordb_bulk_loader.bulk_update.FalkorDB.from_url",
                 return_value=fake_client,
@@ -514,13 +602,7 @@ class TestBulkUpdate:
         ):
             res = runner.invoke(
                 bulk_update,
-                [
-                    "--csv",
-                    "/tmp/csv.tmp",
-                    "--query",
-                    "CREATE (:L {id: row[0]})",
-                    graphname,
-                ],
+                [graphname],
                 catch_exceptions=False,
             )
 
@@ -540,13 +622,7 @@ class TestBulkUpdate:
         ):
             res = runner.invoke(
                 bulk_update,
-                [
-                    "--csv",
-                    "/tmp/csv.tmp",
-                    "--query",
-                    "CREATE (:L {id: row[0]})",
-                    graphname,
-                ],
+                [graphname],
             )
 
         assert res.exit_code == 1

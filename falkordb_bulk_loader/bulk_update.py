@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 import sys
 from timeit import default_timer as timer
 
@@ -14,6 +15,89 @@ logger = logging.getLogger(__name__)
 
 def utf8len(s):
     return len(s.encode("utf-8"))
+
+
+def parse_query_file(query_file):
+    query_map = {}
+    with open(query_file, "rt") as f:
+        reader = csv.reader(f)
+        for line_num, row in enumerate(reader, start=1):
+            if len(row) < 2:
+                raise click.ClickException(
+                    f"{query_file}:{line_num} expected 2 columns: input file, query"
+                )
+
+            input_file = row[0].strip()
+            query = ",".join(row[1:]).strip()
+            if input_file == "" or query == "":
+                raise click.ClickException(
+                    f"{query_file}:{line_num} expected non-empty input file and query"
+                )
+
+            if input_file in query_map:
+                raise click.ClickException(
+                    f"{query_file}:{line_num} duplicate query mapping for '{input_file}'"
+                )
+            query_map[input_file] = query
+
+    if len(query_map) == 0:
+        raise click.ClickException(f"{query_file} did not include any query mappings")
+    return query_map
+
+
+def query_for_input_file(input_file, query_map):
+    # Allow mappings by original argument, absolute path, or basename.
+    candidates = [input_file, os.path.abspath(input_file), os.path.basename(input_file)]
+    queries = [
+        query_map[candidate] for candidate in candidates if candidate in query_map
+    ]
+
+    if len(queries) == 0:
+        raise click.ClickException(
+            f"No query mapping found for input file '{input_file}'. "
+            "Add a matching row in --query-file."
+        )
+
+    if len(set(queries)) > 1:
+        raise click.ClickException(
+            f"Ambiguous query mapping for '{input_file}'. "
+            "Use a single unambiguous key in --query-file."
+        )
+    return queries[0]
+
+
+def collect_jobs(csv_file, query, nodes, relations, query_file):
+    using_single_file_mode = bool(csv_file or query)
+    using_multi_file_mode = bool(any(nodes) or any(relations) or query_file)
+
+    if using_single_file_mode and using_multi_file_mode:
+        raise click.ClickException(
+            "Do not combine --csv/--query with --nodes/--relations/--query-file."
+        )
+
+    if using_multi_file_mode:
+        if not query_file:
+            raise click.ClickException(
+                "--query-file is required when using --nodes/--relations."
+            )
+        if not (any(nodes) or any(relations)):
+            raise click.ClickException(
+                "At least one input file is required via --nodes or --relations."
+            )
+
+        query_map = parse_query_file(query_file)
+        jobs = []
+
+        # Enforce node files first, then relation files.
+        for node_file in nodes:
+            jobs.append((node_file, query_for_input_file(node_file, query_map)))
+        for relation_file in relations:
+            jobs.append((relation_file, query_for_input_file(relation_file, query_map)))
+        return jobs
+
+    if not csv_file or not query:
+        raise click.ClickException("Single-file mode requires both --csv and --query.")
+    return [(csv_file, query)]
 
 
 # Count number of rows in file.
@@ -170,13 +254,28 @@ class BulkUpdate:
 # Cypher query options
 @click.option("--query", "-q", help="Query to run on server")
 @click.option(
+    "--query-file",
+    help="Path to CSV mapping input files to per-file queries. "
+    "Each row must be: input_file,query",
+)
+@click.option(
     "--variable-name",
     "-v",
     default="row",
     help="Variable name for row array in queries (default: row)",
 )
 # CSV file options
-@click.option("--csv", "-c", help="Path to CSV input file")
+@click.option("--csv", "-c", "csv_file", help="Path to CSV input file")
+@click.option(
+    "--nodes",
+    multiple=True,
+    help="Path to node input file (processed before relations when using --query-file)",
+)
+@click.option(
+    "--relations",
+    multiple=True,
+    help="Path to relation input file (processed after nodes when using --query-file)",
+)
 @click.option(
     "--separator", "-o", default=",", help="Field token separator in CSV file"
 )
@@ -206,8 +305,11 @@ def bulk_update(
     socket_timeout,
     socket_connect_timeout,
     query,
+    query_file,
     variable_name,
-    csv,
+    csv_file,
+    nodes,
+    relations,
     separator,
     no_header,
     max_token_size,
@@ -256,35 +358,61 @@ def bulk_update(
             "Server does not support 'MODULE LIST'; skipping FalkorDB module check."
         )
 
-    updater = BulkUpdate(
-        graph,
-        max_token_size,
-        separator,
-        no_header,
-        csv,
-        query,
-        variable_name,
-        client,
-    )
+    jobs = collect_jobs(csv_file, query, nodes, relations, query_file)
 
     logger.debug(f"Validating query against graph '{graph}'...")
 
     if graph in client.list_graphs():
-        updater.validate_query()
+        for filename, file_query in jobs:
+            updater = BulkUpdate(
+                graph,
+                max_token_size,
+                separator,
+                no_header,
+                filename,
+                file_query,
+                variable_name,
+                client,
+            )
+            updater.validate_query()
     else:
         g = client.select_graph(graph)
         # create the graph
         g.query("RETURN 1")
-        updater.validate_query()
+        for filename, file_query in jobs:
+            updater = BulkUpdate(
+                graph,
+                max_token_size,
+                separator,
+                no_header,
+                filename,
+                file_query,
+                variable_name,
+                client,
+            )
+            updater.validate_query()
         g.delete()
 
-    logger.debug(f"Processing CSV file '{csv}'...")
-
-    updater.process_update_csv()
+    statistics = {}
+    for filename, file_query in jobs:
+        logger.debug(f"Processing CSV file '{filename}'...")
+        updater = BulkUpdate(
+            graph,
+            max_token_size,
+            separator,
+            no_header,
+            filename,
+            file_query,
+            variable_name,
+            client,
+        )
+        updater.process_update_csv()
+        for key, value in updater.statistics.items():
+            statistics[key] = statistics.get(key, 0) + value
 
     end_time = timer()
 
-    for key, value in updater.statistics.items():
+    for key, value in statistics.items():
         logger.info(key + ": " + repr(value))
     logger.info(
         f"Update of graph '{graph}' complete in {end_time - start_time:f} seconds"
