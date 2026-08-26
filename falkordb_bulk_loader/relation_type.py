@@ -1,3 +1,4 @@
+import logging
 import re
 import struct
 
@@ -5,6 +6,8 @@ import click
 
 from .entity_file import EntityFile, Type
 from .exceptions import CSVError, SchemaError
+
+logger = logging.getLogger(__name__)
 
 
 # Handler class for processing relation csv files.
@@ -55,6 +58,10 @@ class RelationType(EntityFile):
 
     def process_entities(self):
         entities_created = 0
+        logger.debug(
+            f"Processing relation file '{self.infile.name}' "
+            f"with type '{self.entity_str}' ({self.entities_count} entities)..."
+        )
         with click.progressbar(
             self.reader,
             length=self.entities_count,
@@ -73,8 +80,8 @@ class RelationType(EntityFile):
 
                     src = self.query_buffer.nodes[start_id]
                     dest = self.query_buffer.nodes[end_id]
-                except KeyError as e:
-                    print(
+                except KeyError:
+                    logger.error(
                         "%s:%d Relationship specified a non-existent identifier. src: %s; dest: %s"
                         % (
                             self.infile.name,
@@ -84,7 +91,7 @@ class RelationType(EntityFile):
                         )
                     )
                     if self.config.skip_invalid_edges is False:
-                        raise e
+                        raise
                     continue
                 fmt = "=QQ"  # 8-byte unsigned ints for src and dest
                 try:
@@ -102,6 +109,11 @@ class RelationType(EntityFile):
                     or self.query_buffer.buffer_size + added_size
                     >= self.config.max_buffer_size
                 ):
+                    logger.debug(
+                        "Buffer size threshold reached while processing '%s' "
+                        "(relation type '%s'); flushing partial buffer."
+                        % (self.infile.name, self.entity_str)
+                    )
                     self.query_buffer.reltypes.append(self.to_binary())
                     self.query_buffer.send_buffer()
                     self.reset_partial_binary()
@@ -114,6 +126,6 @@ class RelationType(EntityFile):
                 self.binary_entities.append(row_binary)
             self.query_buffer.reltypes.append(self.to_binary())
         self.infile.close()
-        print(
+        logger.info(
             "%d relations created for type '%s'" % (entities_created, self.entity_str)
         )
