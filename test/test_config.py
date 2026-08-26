@@ -1,3 +1,4 @@
+import csv
 import unittest
 
 from falkordb_bulk_loader.config import Config
@@ -16,7 +17,7 @@ class TestBulkLoader:
         assert not config.skip_invalid_edges
         assert not config.store_node_identifiers
         assert config.separator == ","
-        assert config.quoting == 3
+        assert config.quoting == csv.QUOTE_MINIMAL
 
     def test_modified_values(self):
         """Verify that Config_set updates Config class values accordingly."""
