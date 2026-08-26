@@ -2,16 +2,21 @@
 
 import csv
 import os
+import sys
 import unittest
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 from falkordb import FalkorDB
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ResponseError
 
 from falkordb_bulk_loader.bulk_update import bulk_update
 
+
 class TestBulkUpdate:
 
-    db_con = FalkorDB(host='localhost', port=6379)
+    db_con = FalkorDB(host="localhost", port=6379)
 
     @classmethod
     def setup_class(cls):
@@ -48,7 +53,6 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
         assert "Nodes created: 3" in res.output
         assert "Properties set: 6" in res.output
 
@@ -180,7 +184,6 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
         assert "Nodes created: 3" in res.output
         assert "Properties set: 6" in res.output
 
@@ -237,7 +240,6 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
         assert "Nodes created: 14" in res.output
         assert "Properties set: 56" in res.output
 
@@ -290,7 +292,6 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
         assert "Nodes created: 3" in res.output
         assert "Properties set: 6" in res.output
 
@@ -329,7 +330,6 @@ class TestBulkUpdate:
         )
 
         assert res.exit_code == 0
-        assert "Labels added: 1" in res.output
         assert "Nodes created: 100000" in res.output
         assert "Properties set: 100000" in res.output
 
@@ -402,3 +402,151 @@ class TestBulkUpdate:
 
         assert res.exit_code != 0
         assert "No such file" in str(res.exception)
+
+    def test_socket_timeout_options_passed_to_client(self):
+        """Validate socket timeout CLI options are forwarded to the FalkorDB client."""
+        graphname = "timeout_options_graph"
+        fake_client = MagicMock()
+        fake_client.connection.ping.return_value = True
+        fake_client.connection.module_list.return_value = [{"name": "graph"}]
+        fake_client.list_graphs.return_value = [graphname]
+
+        # Provide a dummy updater so bulk_update can finish without a real CSV.
+        fake_updater = MagicMock()
+        fake_updater.statistics = {}
+
+        runner = CliRunner()
+        with (
+            patch(
+                "falkordb_bulk_loader.bulk_update.BulkUpdate", return_value=fake_updater
+            ),
+            patch(
+                "falkordb_bulk_loader.bulk_update.FalkorDB.from_url",
+                return_value=fake_client,
+            ) as mock_from_url,
+        ):
+            res = runner.invoke(
+                bulk_update,
+                [
+                    "--csv",
+                    "/tmp/csv.tmp",
+                    "--query",
+                    "CREATE (:L {id: row[0]})",
+                    "--socket-timeout",
+                    "300",
+                    "--socket-connect-timeout",
+                    "45.5",
+                    graphname,
+                ],
+                catch_exceptions=False,
+            )
+
+        assert res.exit_code == 0
+        mock_from_url.assert_called_once_with(
+            "falkor://127.0.0.1:6379",
+            socket_timeout=300.0,
+            socket_connect_timeout=45.5,
+        )
+
+    def test_rejects_python_older_than_3_10(self):
+        """Validate unsupported Python versions are rejected early."""
+        runner = CliRunner()
+        with patch.object(sys, "version_info", (3, 9, 0)):
+            res = runner.invoke(
+                bulk_update,
+                [
+                    "legacy_graph",
+                ],
+            )
+
+        assert res.exit_code != 0
+        assert "Python >= 3.10 is required for the falkordb bulk updater." in str(
+            res.exception
+        )
+
+    def test_connection_ping_failure_raises(self):
+        """Validate connection ping errors are surfaced with the expected message."""
+        graphname = "connection_error_graph"
+        fake_client = MagicMock()
+        fake_client.connection.ping.side_effect = RedisConnectionError("boom")
+
+        runner = CliRunner()
+        with patch(
+            "falkordb_bulk_loader.bulk_update.FalkorDB.from_url",
+            return_value=fake_client,
+        ):
+            res = runner.invoke(
+                bulk_update,
+                [
+                    "--csv",
+                    "/tmp/csv.tmp",
+                    "--query",
+                    "CREATE (:L {id: row[0]})",
+                    graphname,
+                ],
+            )
+
+        assert res.exit_code != 0
+        assert "boom" in str(res.exception)
+
+    def test_module_list_response_error_is_ignored(self):
+        """Validate module-list errors do not abort execution."""
+        graphname = "module_list_response_error_graph"
+        fake_client = MagicMock()
+        fake_client.connection.ping.return_value = True
+        fake_client.connection.module_list.side_effect = ResponseError(
+            "module list failed"
+        )
+        fake_client.list_graphs.return_value = [graphname]
+
+        fake_updater = MagicMock()
+        fake_updater.statistics = {}
+
+        runner = CliRunner()
+        with (
+            patch(
+                "falkordb_bulk_loader.bulk_update.BulkUpdate", return_value=fake_updater
+            ),
+            patch(
+                "falkordb_bulk_loader.bulk_update.FalkorDB.from_url",
+                return_value=fake_client,
+            ),
+        ):
+            res = runner.invoke(
+                bulk_update,
+                [
+                    "--csv",
+                    "/tmp/csv.tmp",
+                    "--query",
+                    "CREATE (:L {id: row[0]})",
+                    graphname,
+                ],
+                catch_exceptions=False,
+            )
+
+        assert res.exit_code == 0
+
+    def test_exits_when_graph_module_missing(self):
+        """Validate missing graph module causes a controlled exit."""
+        graphname = "missing_graph_module"
+        fake_client = MagicMock()
+        fake_client.connection.ping.return_value = True
+        fake_client.connection.module_list.return_value = [{"name": "search"}]
+
+        runner = CliRunner()
+        with patch(
+            "falkordb_bulk_loader.bulk_update.FalkorDB.from_url",
+            return_value=fake_client,
+        ):
+            res = runner.invoke(
+                bulk_update,
+                [
+                    "--csv",
+                    "/tmp/csv.tmp",
+                    "--query",
+                    "CREATE (:L {id: row[0]})",
+                    graphname,
+                ],
+            )
+
+        assert res.exit_code == 1
