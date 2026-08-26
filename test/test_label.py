@@ -48,3 +48,30 @@ class TestBulkLoader:
         assert label.entities_count == 2
         assert label.types[0].name == "ID_STRING"
         assert label.types[1].name == "STRING"
+
+    def test_count_entities_multiline_field(self):
+        """count_entities must count CSV rows, not physical lines.
+
+        A quoted field containing an embedded newline (RFC 4180) spans two
+        physical lines but represents exactly one CSV row/entity.  Using
+        raw line-counting inflated the progress-bar total; csv.reader-based
+        counting must return the correct entity count.
+        """
+        test_csv = os.path.join(os.path.dirname(__file__), "multiline_label.tmp")
+        try:
+            # csv.writer uses QUOTE_MINIMAL by default and will quote the field
+            # that contains a newline, producing a valid RFC 4180 file.
+            with open(test_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["_ID", "description"])
+                writer.writerow([0, "line one\nline two"])  # embedded newline
+                writer.writerow([1, "simple"])
+
+            config = Config()  # quoting=csv.QUOTE_MINIMAL by default
+            label = Label(None, test_csv, "MultilineTest", config)
+
+            # There are 2 data rows even though the file has 4 physical lines.
+            assert label.entities_count == 2
+        finally:
+            if os.path.exists(test_csv):
+                os.remove(test_csv)

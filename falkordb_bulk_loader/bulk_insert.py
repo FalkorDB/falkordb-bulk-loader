@@ -7,6 +7,7 @@ import redis
 from falkordb import FalkorDB
 
 from .config import Config
+from .exceptions import CSVError
 from .label import Label
 from .query_buffer import QueryBuffer
 from .relation_type import RelationType
@@ -56,7 +57,10 @@ def process_entities(entities):
 @click.argument("graph")
 # Server connection settings
 @click.option(
-    "--server-url", "-u", default="redis://127.0.0.1:6379", help="Redis connection url"
+    "--server-url",
+    "-u",
+    default="falkor://127.0.0.1:6379",
+    help="FalkorDB connection url",
 )
 @click.option("--nodes", "-n", multiple=True, help="Path to node csv file")
 @click.option(
@@ -263,10 +267,13 @@ def bulk_insert(
     )
     logger.debug(f"Parsed {len(reltypes)} relation CSV file(s).")
 
-    logger.debug("Processing nodes...")
-    process_entities(labels)
-    logger.debug("Processing relations...")
-    process_entities(reltypes)
+    try:
+        logger.debug("Processing nodes...")
+        process_entities(labels)
+        logger.debug("Processing relations...")
+        process_entities(reltypes)
+    except CSVError as e:
+        sys.exit(str(e))
 
     # Send all remaining tokens to Redis
     logger.debug("Flushing remaining buffered data to FalkorDB...")

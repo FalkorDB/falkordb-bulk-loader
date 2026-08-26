@@ -19,7 +19,7 @@ def utf8len(s):
 # Count number of rows in file.
 def count_entities(filename):
     entities_count = 0
-    with open(filename, "rt") as f:
+    with open(filename, "rt", encoding="utf-8-sig") as f:
         entities_count = sum(1 for line in f)
     return entities_count
 
@@ -101,8 +101,11 @@ class BulkUpdate:
 
     def process_update_csv(self):
         entity_count = count_entities(self.filename)
+        if self.no_header is False:
+            # The header row is counted but not processed as data.
+            entity_count = max(entity_count - 1, 0)
 
-        with open(self.filename, "rt") as f:
+        with open(self.filename, "rt", encoding="utf-8-sig") as f:
             if self.no_header is False:
                 next(f)  # skip header
 
