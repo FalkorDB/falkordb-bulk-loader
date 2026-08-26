@@ -28,8 +28,7 @@ def row_count(in_csv):
 
 class TestBulkLoader:
 
-    db_con = FalkorDB(host='localhost', port=6379)
-
+    db_con = FalkorDB(host="localhost", port=6379)
 
     @classmethod
     def setup_class(cls):
@@ -831,11 +830,12 @@ class TestBulkLoader:
         assert res.exit_code == 0
         assert "2 nodes created" in res.output
 
-        db_con = FalkorDB(host='localhost', port=6379)
+        db_con = FalkorDB(host="localhost", port=6379)
         res = db_con.execute_command(
             "GRAPH.EXPLAIN", graphname, "MATCH (p:Person) WHERE p.age > 16 RETURN p"
         )
-        assert "        Node By Index Scan | (p:Person)" in res
+        explain_plan = "\n".join(res) if isinstance(res, list) else str(res)
+        assert "Node By Index Scan | (p:Person)" in explain_plan
 
     def test_ensure_full_text_index_is_created(self):
         graphname = "index_full_text_test"
