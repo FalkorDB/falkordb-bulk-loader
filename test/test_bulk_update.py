@@ -450,16 +450,23 @@ class TestBulkUpdate:
         )
 
     def test_rejects_python_older_than_3_10(self):
-        """Validate unsupported Python versions are rejected early."""
         runner = CliRunner()
-        with patch.object(sys, "version_info", (3, 9, 0)):
+        with patch("falkordb_bulk_loader.bulk_update.sys") as mock_sys:
+            mock_sys.version_info = (3, 9, 0)
+            # Keep real attributes used by logging / other code paths.
+            mock_sys.stdout = sys.stdout
+            mock_sys.stderr = sys.stderr
             res = runner.invoke(
                 bulk_update,
                 [
-                    "legacy_graph",
+                    "--csv",
+                    "/tmp/does-not-matter.csv",
+                    "--query",
+                    "RETURN 1",
+                    "tmpgraph",
                 ],
+                catch_exceptions=True,
             )
-
         assert res.exit_code != 0
         assert "Python >= 3.10 is required for the falkordb bulk updater." in str(
             res.exception
@@ -600,3 +607,25 @@ class TestBulkUpdateEmptyCSV:
                 mock_emit.assert_not_called()
         finally:
             os.unlink(csv_path)
+
+
+class TestBulkUpdateRequiredOptions:
+    def test_missing_query_gives_usage_error(self):
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            ["--csv", "/tmp/does-not-matter.csv", "tmpgraph"],
+            catch_exceptions=False,
+        )
+        assert res.exit_code != 0
+        assert "Missing option" in res.output or "required" in res.output.lower()
+
+    def test_missing_csv_gives_usage_error(self):
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_update,
+            ["--query", "RETURN 1", "tmpgraph"],
+            catch_exceptions=False,
+        )
+        assert res.exit_code != 0
+        assert "Missing option" in res.output or "required" in res.output.lower()
