@@ -1,4 +1,8 @@
+import logging
+
 from pathos.pools import ThreadPool as Pool
+
+logger = logging.getLogger(__name__)
 
 
 def run(client, graphname, args):
@@ -42,6 +46,9 @@ class QueryBuffer:
         self.pool = Pool(nodes=1)
         self.tasks = []
 
+        # Index of the next buffer to be sent (incremented after each send)
+        self.buffer_index = 0
+
     def send_buffer(self):
         """Send all pending inserts to Redis"""
         # Do nothing if we have no entities
@@ -57,6 +64,20 @@ class QueryBuffer:
         if self.initial_query:
             args.insert(0, "BEGIN")
             self.initial_query = False
+
+        logger.debug(
+            "Sending buffer #%d to graph '%s': %d nodes, %d relations, %d labels, %d relation types, %d bytes"
+            % (
+                self.buffer_index,
+                self.graphname,
+                self.node_count,
+                self.relation_count,
+                len(self.labels),
+                len(self.reltypes),
+                self.buffer_size,
+            )
+        )
+        self.buffer_index += 1
 
         task = self.pool.apipe(run, self.client, self.graphname, args)
         self.add_task(task)
@@ -91,7 +112,7 @@ class QueryBuffer:
         self.relations_created += int(stats[1].split(" ")[0])
 
     def report_completion(self, runtime):
-        print(
+        logger.info(
             "Construction of graph '%s' complete: %d nodes created, %d relations created in %f seconds"
             % (self.graphname, self.nodes_created, self.relations_created, runtime)
         )
