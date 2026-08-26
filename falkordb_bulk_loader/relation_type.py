@@ -99,7 +99,8 @@ class RelationType(EntityFile):
                         row_binary = struct.pack(fmt, src, dest) + self.pack_props(row)
                     except SchemaError as e:
                         raise SchemaError(
-                            "%s:%d %s" % (self.infile.name, self.reader.line_num, str(e))
+                            "%s:%d %s"
+                            % (self.infile.name, self.reader.line_num, str(e))
                         )
                     row_binary_len = len(row_binary)
                     # If the addition of this entity will make the binary token grow too large,
@@ -127,7 +128,8 @@ class RelationType(EntityFile):
                     self.binary_entities.append(row_binary)
                 self.query_buffer.reltypes.append(self.to_binary())
             logger.info(
-                "%d relations created for type '%s'" % (entities_created, self.entity_str)
+                "%d relations created for type '%s'"
+                % (entities_created, self.entity_str)
             )
         finally:
             try:
