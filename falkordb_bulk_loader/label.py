@@ -5,7 +5,7 @@ import sys
 import click
 
 from .entity_file import EntityFile, Type
-from .exceptions import CSVError, SchemaError
+from .exceptions import SchemaError
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,13 @@ class Label(EntityFile):
             self.id_namespace = match.group(1)
 
     def update_node_dictionary(self, identifier):
-        """Add identifier->ID pair to dictionary if we are building relations"""
+        """Add identifier->ID pair to dictionary if we are building relations.
+
+        Returns True if the identifier was inserted, False if it was a
+        duplicate that should be skipped (only possible when
+        ``skip_invalid_nodes`` is True; otherwise this method exits the
+        process via ``sys.exit(1)`` to preserve the historical behaviour).
+        """
         if identifier in self.query_buffer.nodes:
             sys.stderr.write(
                 "Node identifier '%s' was used multiple times - second occurrence at %s:%d\n"
@@ -60,12 +66,11 @@ class Label(EntityFile):
             )
             sys.stderr.flush()
             if self.config.skip_invalid_nodes is False:
-                raise CSVError(
-                    "Duplicate node identifier '%s' at %s:%d"
-                    % (identifier, self.infile.name, self.reader.line_num)
-                )
+                sys.exit(1)
+            return False
         self.query_buffer.nodes[identifier] = self.query_buffer.top_node_id
         self.query_buffer.top_node_id += 1
+        return True
 
     def process_entities(self):
         entities_created = 0
@@ -87,7 +92,11 @@ class Label(EntityFile):
                     id_field = row[self.id]
                     if self.id_namespace is not None:
                         id_field = self.id_namespace + "." + str(id_field)
-                    self.update_node_dictionary(id_field)
+                    if not self.update_node_dictionary(id_field):
+                        # Duplicate identifier and skip_invalid_nodes is True;
+                        # truly skip this row so we do not corrupt the ID
+                        # mapping or insert the duplicate into the graph.
+                        continue
 
                 try:
                     row_binary = self.pack_props(row)
