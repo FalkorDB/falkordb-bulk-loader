@@ -99,3 +99,11 @@ class TestTypedPropToBinary:
         result = typed_prop_to_binary("[1, 2, 3]", Type.ARRAY)
         assert isinstance(result, bytes)
         assert result[0] == Type.ARRAY.value
+
+
+def test_id_integer_unparseable_raises_schema_error():
+    from falkordb_bulk_loader.entity_file import typed_prop_to_binary, Type
+    from falkordb_bulk_loader.exceptions import SchemaError
+    import pytest
+    with pytest.raises(SchemaError, match="integer ID"):
+        typed_prop_to_binary("not-an-int", Type.ID_INTEGER)
