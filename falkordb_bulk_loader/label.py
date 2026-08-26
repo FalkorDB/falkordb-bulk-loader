@@ -1,10 +1,13 @@
+import logging
 import re
 import sys
 
 import click
 
 from .entity_file import EntityFile, Type
-from .exceptions import SchemaError
+from .exceptions import CSVError, SchemaError
+
+logger = logging.getLogger(__name__)
 
 
 class Label(EntityFile):
@@ -57,12 +60,19 @@ class Label(EntityFile):
             )
             sys.stderr.flush()
             if self.config.skip_invalid_nodes is False:
-                sys.exit(1)
+                raise CSVError(
+                    "Duplicate node identifier '%s' at %s:%d"
+                    % (identifier, self.infile.name, self.reader.line_num)
+                )
         self.query_buffer.nodes[identifier] = self.query_buffer.top_node_id
         self.query_buffer.top_node_id += 1
 
     def process_entities(self):
         entities_created = 0
+        logger.debug(
+            f"Processing node file '{self.infile.name}' "
+            f"with label '{self.entity_str}' ({self.entities_count} entities)..."
+        )
         with click.progressbar(
             self.reader,
             length=self.entities_count,
@@ -97,6 +107,11 @@ class Label(EntityFile):
                     or self.query_buffer.buffer_size + added_size
                     >= self.config.max_buffer_size
                 ):
+                    logger.debug(
+                        "Buffer size threshold reached while processing '%s' "
+                        "(label '%s'); flushing partial buffer."
+                        % (self.infile.name, self.entity_str)
+                    )
                     self.query_buffer.labels.append(self.to_binary())
                     self.query_buffer.send_buffer()
                     self.reset_partial_binary()
@@ -109,4 +124,6 @@ class Label(EntityFile):
                 self.binary_entities.append(row_binary)
             self.query_buffer.labels.append(self.to_binary())
         self.infile.close()
-        print("%d nodes created with label '%s'" % (entities_created, self.entity_str))
+        logger.info(
+            "%d nodes created with label '%s'" % (entities_created, self.entity_str)
+        )

@@ -49,7 +49,15 @@ def convert_schema_type(in_type):
 def array_prop_to_binary(format_str, prop_val):
     # Evaluate the array to convert its elements.
     # (This allows us to handle nested arrays.)
-    array_val = ast.literal_eval(prop_val)
+    # Catch ValueError/SyntaxError (malformed input) and RecursionError/
+    # MemoryError (pathological deep nesting) explicitly so callers get a
+    # clear SchemaError instead of an opaque interpreter-level exception.
+    try:
+        array_val = ast.literal_eval(prop_val)
+    except (ValueError, SyntaxError, RecursionError, MemoryError) as e:
+        raise SchemaError(
+            f"Could not parse '{prop_val}' as an array: {type(e).__name__}"
+        )
     # Send array length as a long.
     array_to_send = struct.pack(format_str + "q", Type.ARRAY.value, len(array_val))
     # Recursively send each array element as a string.
@@ -164,7 +172,9 @@ def inferred_prop_to_binary(prop_val):
     if prop_val[0] == "[" and prop_val[-1] == "]":
         try:
             return array_prop_to_binary(format_str, prop_val)
-        except Exception:
+        except SchemaError:
+            # Schemaless mode: if the value looks like an array but can't be
+            # parsed, fall through and treat it as a plain string.
             pass
 
     # If we've reached this point, the property is a string.
@@ -209,14 +219,23 @@ class EntityFile(object):
 
         self.convert_header()  # Extract data from header row.
         self.count_entities()  # Count number of entities/row in file.
-        next(self.reader)  # Skip the header row.
 
     # Count number of rows in file.
     def count_entities(self):
-        self.entities_count = 0
-        self.entities_count = sum(1 for line in self.infile)
-        # seek back
-        self.infile.seek(0)
+        # Open a separate file handle so self.reader's position and line_num
+        # are not disturbed.  Using csv.reader (rather than raw line iteration)
+        # ensures that fields containing embedded newlines (RFC 4180) are
+        # counted as a single row.
+        with io.open(self.infile.name, "rt") as counting_file:
+            counting_reader = csv.reader(
+                counting_file,
+                delimiter=self.config.separator,
+                skipinitialspace=True,
+                quoting=self.config.quoting,
+                escapechar=self.config.escapechar,
+            )
+            next(counting_reader)  # skip header row
+            self.entities_count = sum(1 for _ in counting_reader)
         return self.entities_count
 
     # Simple input validations for each row of a CSV file
@@ -264,7 +283,13 @@ class EntityFile(object):
             # TODO might need to check for backtick escapes
             if len(pair) > 2:
                 raise CSVError(
-                    f"{self.infile.name}: Field '{field}' had {len(field)} colons"
+                    f"{self.infile.name}: Field '{field}' had {len(pair) - 1} colons"
+                )
+
+            # Missing colon means the field is not a valid name:type pair.
+            if len(pair) < 2:
+                raise CSVError(
+                    f"{self.infile.name}: Field '{field}' is missing a colon separator"
                 )
 
             # Convert the column type.
