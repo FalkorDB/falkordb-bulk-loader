@@ -220,7 +220,15 @@ python3 falkordb_bulk_loader/bulk_update.py GRAPHNAME [OPTIONS]
 |  -t   | --max-token-size INTEGER | Max size of each token in megabytes (default 500, max 512) |
 |       | --verbose                | Print extra information about the steps performed during the update |
 
-The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query. Use `--socket-timeout` and `--socket-connect-timeout` to tune client socket deadlines for long-running updates.
+The bulk updater allows a CSV file to be read in batches and committed to falkordb according to the provided query. CSV cells are converted to native Python types and sent via Cypher parameter binding (`params={"rows": ...}`), which avoids manual string escaping and prevents Cypher injection through cell contents.
+
+CSV cell type conversion rules:
+- Integers and floats are parsed as numbers (non-finite values like `NaN`/`Infinity` stay strings).
+- `true`/`false` (any case) become booleans.
+- Bracketed literals such as `[1, 'a']` or Cypher-style `[true, null]` become arrays when parseable.
+- Everything else is treated as a string; empty cells become `""` so guards like `row[i] <> ''` keep working.
+
+Use `--socket-timeout` and `--socket-connect-timeout` to tune client socket deadlines for long-running updates.
 
 For example, given the CSV files described in [Input Schema CSV examples](#input-schema-csv-examples), the bulk loader could create the same nodes and relationships with the commands:
 
