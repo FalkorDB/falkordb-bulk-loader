@@ -164,7 +164,6 @@ class BulkUpdate:
                 f,
                 delimiter=self.separator,
                 skipinitialspace=True,
-                escapechar="\\",
             )
 
             rows = []

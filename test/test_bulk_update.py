@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import csv
+import pytest
 import os
 import sys
 import tempfile
