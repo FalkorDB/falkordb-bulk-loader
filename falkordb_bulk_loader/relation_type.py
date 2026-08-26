@@ -57,75 +57,82 @@ class RelationType(EntityFile):
             self.end_namespace = end_match.group(1)
 
     def process_entities(self):
-        entities_created = 0
-        logger.debug(
-            f"Processing relation file '{self.infile.name}' "
-            f"with type '{self.entity_str}' ({self.entities_count} entities)..."
-        )
-        with click.progressbar(
-            self.reader,
-            length=self.entities_count,
-            label=self.entity_str,
-            update_min_steps=100,
-        ) as reader:
-            for row in reader:
-                self.validate_row(row)
-                try:
-                    start_id = row[self.start_id]
-                    if self.start_namespace:
-                        start_id = self.start_namespace + "." + str(start_id)
-                    end_id = row[self.end_id]
-                    if self.end_namespace:
-                        end_id = self.end_namespace + "." + str(end_id)
+        try:
+            entities_created = 0
+            logger.debug(
+                f"Processing relation file '{self.infile.name}' "
+                f"with type '{self.entity_str}' ({self.entities_count} entities)..."
+            )
+            with click.progressbar(
+                self.reader,
+                length=self.entities_count,
+                label=self.entity_str,
+                update_min_steps=100,
+            ) as reader:
+                for row in reader:
+                    self.validate_row(row)
+                    try:
+                        start_id = row[self.start_id]
+                        if self.start_namespace:
+                            start_id = self.start_namespace + "." + str(start_id)
+                        end_id = row[self.end_id]
+                        if self.end_namespace:
+                            end_id = self.end_namespace + "." + str(end_id)
 
-                    src = self.query_buffer.nodes[start_id]
-                    dest = self.query_buffer.nodes[end_id]
-                except KeyError:
-                    logger.error(
-                        "%s:%d Relationship specified a non-existent identifier. src: %s; dest: %s"
-                        % (
-                            self.infile.name,
-                            self.reader.line_num - 1,
-                            row[self.start_id],
-                            row[self.end_id],
+                        src = self.query_buffer.nodes[start_id]
+                        dest = self.query_buffer.nodes[end_id]
+                    except KeyError:
+                        logger.error(
+                            "%s:%d Relationship specified a non-existent identifier. src: %s; dest: %s"
+                            % (
+                                self.infile.name,
+                                self.reader.line_num - 1,
+                                row[self.start_id],
+                                row[self.end_id],
+                            )
                         )
-                    )
-                    if self.config.skip_invalid_edges is False:
-                        raise
-                    continue
-                fmt = "=QQ"  # 8-byte unsigned ints for src and dest
-                try:
-                    row_binary = struct.pack(fmt, src, dest) + self.pack_props(row)
-                except SchemaError as e:
-                    raise SchemaError(
-                        "%s:%d %s" % (self.infile.name, self.reader.line_num, str(e))
-                    )
-                row_binary_len = len(row_binary)
-                # If the addition of this entity will make the binary token grow too large,
-                # send the buffer now.
-                added_size = self.binary_size + row_binary_len
-                if (
-                    added_size >= self.config.max_token_size
-                    or self.query_buffer.buffer_size + added_size
-                    >= self.config.max_buffer_size
-                ):
-                    logger.debug(
-                        "Buffer size threshold reached while processing '%s' "
-                        "(relation type '%s'); flushing partial buffer."
-                        % (self.infile.name, self.entity_str)
-                    )
-                    self.query_buffer.reltypes.append(self.to_binary())
-                    self.query_buffer.send_buffer()
-                    self.reset_partial_binary()
-                    # Push the reltype onto the query buffer again, as there are more entities to process.
-                    self.query_buffer.reltypes.append(self.to_binary())
+                        if self.config.skip_invalid_edges is False:
+                            raise
+                        continue
+                    fmt = "=QQ"  # 8-byte unsigned ints for src and dest
+                    try:
+                        row_binary = struct.pack(fmt, src, dest) + self.pack_props(row)
+                    except SchemaError as e:
+                        raise SchemaError(
+                            "%s:%d %s"
+                            % (self.infile.name, self.reader.line_num, str(e))
+                        )
+                    row_binary_len = len(row_binary)
+                    # If the addition of this entity will make the binary token grow too large,
+                    # send the buffer now.
+                    added_size = self.binary_size + row_binary_len
+                    if (
+                        added_size >= self.config.max_token_size
+                        or self.query_buffer.buffer_size + added_size
+                        >= self.config.max_buffer_size
+                    ):
+                        logger.debug(
+                            "Buffer size threshold reached while processing '%s' "
+                            "(relation type '%s'); flushing partial buffer."
+                            % (self.infile.name, self.entity_str)
+                        )
+                        self.query_buffer.reltypes.append(self.to_binary())
+                        self.query_buffer.send_buffer()
+                        self.reset_partial_binary()
+                        # Push the reltype onto the query buffer again, as there are more entities to process.
+                        self.query_buffer.reltypes.append(self.to_binary())
 
-                self.query_buffer.relation_count += 1
-                entities_created += 1
-                self.binary_size += row_binary_len
-                self.binary_entities.append(row_binary)
-            self.query_buffer.reltypes.append(self.to_binary())
-        self.infile.close()
-        logger.info(
-            "%d relations created for type '%s'" % (entities_created, self.entity_str)
-        )
+                    self.query_buffer.relation_count += 1
+                    entities_created += 1
+                    self.binary_size += row_binary_len
+                    self.binary_entities.append(row_binary)
+                self.query_buffer.reltypes.append(self.to_binary())
+            logger.info(
+                "%d relations created for type '%s'"
+                % (entities_created, self.entity_str)
+            )
+        finally:
+            try:
+                self.infile.close()
+            except Exception as e:
+                logger.warning("Failed to close input file cleanly: %s", e)
