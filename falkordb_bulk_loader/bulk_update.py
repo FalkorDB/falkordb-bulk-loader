@@ -101,6 +101,9 @@ class BulkUpdate:
 
     def process_update_csv(self):
         entity_count = count_entities(self.filename)
+        if self.no_header is False:
+            # The header row is counted but not processed as data.
+            entity_count = max(entity_count - 1, 0)
 
         with open(self.filename, "rt") as f:
             if self.no_header is False:
@@ -155,6 +158,18 @@ class BulkUpdate:
     default="falkor://127.0.0.1:6379",
     help="FalkorDB connection url",
 )
+@click.option(
+    "--socket-timeout",
+    type=click.FloatRange(min=0.0, min_open=True),
+    default=None,
+    help="Socket read/write timeout in seconds (forwarded to FalkorDB client).",
+)
+@click.option(
+    "--socket-connect-timeout",
+    type=click.FloatRange(min=0.0, min_open=True),
+    default=None,
+    help="Socket connection timeout in seconds (forwarded to FalkorDB client).",
+)
 # Cypher query options
 @click.option("--query", "-q", help="Query to run on server")
 @click.option(
@@ -191,6 +206,8 @@ class BulkUpdate:
 def bulk_update(
     graph,
     server_url,
+    socket_timeout,
+    socket_connect_timeout,
     query,
     variable_name,
     csv,
@@ -216,7 +233,11 @@ def bulk_update(
 
     # Attempt to connect to the server
     logger.debug(f"Connecting to FalkorDB server at '{server_url}'...")
-    client = FalkorDB.from_url(server_url)
+    client = FalkorDB.from_url(
+        server_url,
+        socket_timeout=socket_timeout,
+        socket_connect_timeout=socket_connect_timeout,
+    )
     try:
         client.connection.ping()
     except redis.exceptions.ConnectionError as e:
