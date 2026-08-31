@@ -3,6 +3,7 @@ import csv
 import io
 import math
 import os
+import stat
 import struct
 import sys
 from enum import Enum
@@ -225,21 +226,34 @@ class EntityFile(object):
 
     # Count number of rows in file.
     def count_entities(self):
-        # Open a separate file handle so self.reader's position and line_num
-        # are not disturbed.  Using csv.reader (rather than raw line iteration)
-        # ensures that fields containing embedded newlines (RFC 4180) are
-        # counted as a single row.
-        with io.open(self.infile.name, "rt") as counting_file:
-            counting_reader = csv.reader(
-                counting_file,
-                delimiter=self.config.separator,
-                skipinitialspace=True,
-                quoting=self.config.quoting,
-                escapechar=self.config.escapechar,
-            )
-            next(counting_reader)  # skip header row
-            self.entities_count = sum(1 for _ in counting_reader)
-        return self.entities_count
+        # Named pipes (FIFOs) and non-seekable streams cannot be pre-read without
+        # draining the pipe or causing deadlock with background writer threads.
+        try:
+            if stat.S_ISFIFO(os.stat(self.infile.name).st_mode):
+                self.entities_count = 0
+                return 0
+        except (OSError, ValueError, AttributeError):
+            pass
+
+        try:
+            # Open a separate file handle so self.reader's position and line_num
+            # are not disturbed.  Using csv.reader (rather than raw line iteration)
+            # ensures that fields containing embedded newlines (RFC 4180) are
+            # counted as a single row.
+            with io.open(self.infile.name, "rt", encoding="utf-8-sig") as counting_file:
+                counting_reader = csv.reader(
+                    counting_file,
+                    delimiter=self.config.separator,
+                    skipinitialspace=True,
+                    quoting=self.config.quoting,
+                    escapechar=self.config.escapechar,
+                )
+                next(counting_reader)  # skip header row
+                self.entities_count = sum(1 for _ in counting_reader)
+            return self.entities_count
+        except (OSError, io.UnsupportedOperation):
+            self.entities_count = 0
+            return 0
 
     # Simple input validations for each row of a CSV file
     def validate_row(self, row):
