@@ -937,3 +937,67 @@ class TestBulkLoader:
             [1, "Filipe", ["User"], 1, 40, ["Post"]],
         ]
         assert query_result.result_set == expected_result
+
+    def test_fifo_named_pipe_streaming(self):
+        """Validate that bulk insert can read from POSIX named pipes (FIFOs)."""
+        import tempfile
+        import threading
+
+        graphname = "fifo_stream_graph"
+        temp_dir = tempfile.mkdtemp(prefix="falkor_test_fifo_")
+        node_pipe = os.path.join(temp_dir, "nodes.fifo")
+        edge_pipe = os.path.join(temp_dir, "edges.fifo")
+
+        os.mkfifo(node_pipe)
+        os.mkfifo(edge_pipe)
+
+        def feed_nodes():
+            with open(node_pipe, "w", encoding="utf-8") as f:
+                f.write("id:ID,name:STRING\n")
+                f.write("u1,Alice\n")
+                f.write("u2,Bob\n")
+
+        def feed_edges():
+            with open(edge_pipe, "w", encoding="utf-8") as f:
+                f.write(":START_ID,:END_ID,role:STRING\n")
+                f.write("u1,u2,KNOWS\n")
+
+        t_nodes = threading.Thread(target=feed_nodes, daemon=True)
+        t_edges = threading.Thread(target=feed_edges, daemon=True)
+        t_nodes.start()
+        t_edges.start()
+
+        runner = CliRunner()
+        res = runner.invoke(
+            bulk_insert,
+            [
+                "--nodes-with-label",
+                "Person",
+                node_pipe,
+                "--relations-with-type",
+                "KNOWS",
+                edge_pipe,
+                "--enforce-schema",
+                graphname,
+            ],
+            catch_exceptions=False,
+        )
+
+        t_nodes.join(timeout=5.0)
+        t_edges.join(timeout=5.0)
+
+        # Cleanup FIFOs
+        for p in [node_pipe, edge_pipe]:
+            if os.path.exists(p):
+                os.remove(p)
+        if os.path.exists(temp_dir):
+            os.rmdir(temp_dir)
+
+        assert res.exit_code == 0
+        assert "2 nodes created" in res.output
+        assert "1 relations created" in res.output
+
+        graph = self.db_con.select_graph(graphname)
+        res = graph.query("MATCH (a:Person)-[r:KNOWS]->(b:Person) RETURN a.name, b.name")
+        assert res.result_set == [["Alice", "Bob"]]
+
